@@ -2,7 +2,6 @@ package graph
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/jackc/pgx/v5"
@@ -16,14 +15,13 @@ type heldQuerier struct {
 	Tx pgQuerier
 	// pipe is the transaction the rows are written in: their inserts wait for the next statement (nil: sent at once)
 	pipe *pipeTx
-	// versions are the node versions held, in the order written, each with its link set once set
+	// versions are the node versions held, in the order written, each with its link set (ADR 0141)
 	versions []heldVersion
 	// links are the link rows held (links and drops, ADR 0141), written after the versions they leave
 	links []heldLink
 	// the rows held indexed, so that holding or asking for one costs the same whatever the number held (a commit holds
-	// a version and a link set per node): verAt the position of a version by its node, refs the versions written or left by a link, keys the namespace and
-	// key of the nodes created, nodes the nodes of refs
-	verAt map[domain.NodeID]int
+	// a version per node): refs the versions written or left by a link, keys the namespace and key of the nodes
+	// created, nodes the nodes of refs
 	refs  map[domain.NodeRef]bool
 	nodes map[domain.NodeID]bool
 	keys  map[[2]string]bool
@@ -59,40 +57,23 @@ func (h *heldQuerier) forgetRefs() {
 	}
 }
 
-// heldVersion is a node version a write transaction writes: its node created (version 1) or moved to it, its row with
-// how it holds its links (ADR 0141), all written in a few statements for the versions of a commit.
+// heldVersion is a node version a write transaction writes: its node created (version 1), its row with how it holds
+// its links (ADR 0141), all written in a few statements for the versions of a commit.
 type heldVersion struct {
 	n       domain.Node
 	version []any
-	set     [4]any
 }
 
-// holdVersion holds a version; refused (false) when its node is held at another version (one statement moves a
-// node once).
-func (h *heldQuerier) holdVersion(n domain.Node, args []any) bool {
-	if _, ok := h.verAt[n.ID]; ok {
-		return false
+// holdVersion holds a version.
+func (h *heldQuerier) holdVersion(n domain.Node, args []any) {
+	if h.keys == nil {
+		h.keys = map[[2]string]bool{}
 	}
-	if h.verAt == nil {
-		h.verAt, h.keys = map[domain.NodeID]int{}, map[[2]string]bool{}
-	}
-	h.verAt[n.ID] = len(h.versions)
-	h.versions = append(h.versions, heldVersion{n: n, version: args, set: [4]any{nil, nil, 0, 0}})
+	h.versions = append(h.versions, heldVersion{n: n, version: args})
 	h.noteRef(n.Ref())
 	if n.Version == 1 {
 		h.keys[[2]string{domain.NamespaceOf(n.Namespace), n.Key}] = true
 	}
-	return true
-}
-
-// holdLinkSet sets how a held version holds its links; false when the version is not held.
-func (h *heldQuerier) holdLinkSet(from domain.NodeRef, set [4]any) bool {
-	i, ok := h.verAt[from.ID]
-	if !ok || h.versions[i].n.Ref() != from {
-		return false
-	}
-	h.versions[i].set = set
-	return true
 }
 
 // flush writes the rows held.
@@ -106,31 +87,26 @@ func (h *heldQuerier) flush(ctx context.Context) error {
 // versionRowsPerInsert is the number of node versions one statement writes (23 arguments each).
 const versionRowsPerInsert = 500
 
-// flushVersions writes the versions held: the nodes created, the nodes moved to their next version (each checked:
-// ErrConflict when another writer moved it first), then the versions with their link sets.
+// flushVersions writes the versions held: the nodes created, then the versions with their link sets. Nothing is
+// updated (ADR 0174 addendum): two writers giving a node the same next version meet on the key of node_version
+// (ErrConflict).
 func (h *heldQuerier) flushVersions(ctx context.Context) error {
 	if len(h.versions) == 0 {
 		return nil
 	}
 	vs := h.versions
-	h.versions, h.verAt, h.keys = nil, nil, nil
+	h.versions, h.keys = nil, nil
 	h.forgetRefs()
 	var created []heldVersion
-	var movedIDs []string
-	var movedTo []int32
 	for _, v := range vs {
 		if v.n.Version == 1 {
 			created = append(created, v)
-		} else {
-			movedIDs, movedTo = append(movedIDs, string(v.n.ID)), append(movedTo, int32(v.n.Version))
 		}
 	}
-	nodeColumns := []string{"id", "namespace", "key", "type", "latest", "project", "creator", "creator_unit"}
 	for chunk := range slices.Chunk(created, versionRowsPerInsert) {
 		args := make([]any, 0, len(chunk)*len(nodeColumns))
 		for _, v := range chunk {
-			n := v.n
-			args = append(args, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, 1, n.Project.String(), n.Creator.Subject, n.Creator.Unit.String())
+			args = append(args, nodeArgs(v.n)...)
 		}
 		what := "nodes"
 		if len(chunk) == 1 {
@@ -140,36 +116,16 @@ func (h *heldQuerier) flushVersions(ctx context.Context) error {
 			return err
 		}
 	}
-	if len(movedIDs) > 0 {
-		tag, err := h.Tx.Exec(ctx, `UPDATE node SET latest = u.v FROM unnest($1::uuid[], $2::int[]) AS u(id, v) WHERE node.id = u.id AND node.latest = u.v - 1`, movedIDs, movedTo)
-		if err != nil {
-			return mapErr(err, "nodes")
-		}
-		if int(tag.RowsAffected()) != len(movedIDs) {
-			// the node another writer moved first: the one whose latest is not the version before
-			for _, v := range vs {
-				if v.n.Version == 1 {
-					continue
-				}
-				var latest int
-				if err := h.Tx.QueryRow(ctx, `SELECT latest FROM node WHERE id = $1`, string(v.n.ID)).Scan(&latest); err != nil || latest != int(v.n.Version) {
-					return fmt.Errorf("node %s: not the next version: %w", v.n.Ref(), ErrConflict)
-				}
-			}
-			return fmt.Errorf("nodes: not the next versions: %w", ErrConflict)
-		}
-	}
-	columns := append(append([]string{}, nodeVersionColumns...), "links", "links_base", "links_depth", "links_seq")
 	for chunk := range slices.Chunk(vs, versionRowsPerInsert) {
-		args := make([]any, 0, len(chunk)*len(columns))
+		args := make([]any, 0, len(chunk)*len(nodeVersionColumns))
 		for _, v := range chunk {
-			args = append(append(args, v.version...), v.set[:]...)
+			args = append(args, v.version...)
 		}
 		what := "node versions"
 		if len(chunk) == 1 {
 			what = "node " + chunk[0].n.Ref().String()
 		}
-		if err := h.write(ctx, dialectPG.sqlInsertRows("node_version", columns, len(chunk)), args, what); err != nil {
+		if err := h.write(ctx, dialectPG.sqlInsertRows("node_version", nodeVersionColumns, len(chunk)), args, what); err != nil {
 			return err
 		}
 	}

@@ -91,7 +91,8 @@ func (a *applier) prepareChangeImpacts() error {
 		todo = append(todo, commit{cn, *d})
 	}
 	// 1. the versions: the next version of each node, whatever the branch it was written on; the latest version of
-	// each node, and the latest on the change's branch, read in two statements
+	// each node, and the latest on the change's branch, read in two statements. Numbered first, written with their
+	// links once those are resolved to the numbers: a version is written whole (ADR 0174 addendum)
 	var ids []domain.NodeID
 	var keys []string // of the creations, checked free in one statement
 	for _, l := range todo {
@@ -116,7 +117,7 @@ func (a *applier) prepareChangeImpacts() error {
 	from := map[domain.NodeID]domain.Version{} // the version each draft was checked out from
 	nodes := make([]domain.Node, len(todo))
 	for i, l := range todo {
-		n, err := a.writeVersion(l.cn, l.d)
+		n, err := a.versionOf(l.cn, l.d)
 		if err != nil {
 			return err
 		}
@@ -128,7 +129,7 @@ func (a *applier) prepareChangeImpacts() error {
 			from[n.ID] = l.cn.Pre.Version
 		}
 	}
-	// 2. their links, to the versions of the change
+	// 2. the versions with their links, to the versions of the change
 	wrote := make([][]domain.Link, len(todo))
 	for i, l := range todo {
 		links := make([]domain.Link, 0, len(l.d.Links))
@@ -147,7 +148,7 @@ func (a *applier) prepareChangeImpacts() error {
 		for _, p := range nodes[i].Parents {
 			like = append(like, domain.NodeRef{ID: nodes[i].ID, Version: p})
 		}
-		if err := a.g.putLinks(a.ctx, a.tx, nodes[i], links, like...); err != nil {
+		if err := a.g.putVersion(a.ctx, a.tx, nodes[i], links, like...); err != nil {
 			return err
 		}
 		for j := range links {
@@ -217,11 +218,12 @@ func (a *applier) loadEvents() error {
 	return nil
 }
 
-// writeVersion writes the version of a draft on the branch of the change: the next version number of the node, the
+// versionOf is the version of a draft on the branch of the change, written with its links (putVersion): the next
+// version number of the node, the
 // version the draft was checked out from as its parent, the origin of the change impact (its last review comment, else
 // its rationale). The node changing on the change branch since the draft was checked out is a conflict (the branch moved
 // by other means, such as the merge of a sub-change, ADR 0103).
-func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
+func (a *applier) versionOf(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
 	comment := cn.Rationale
 	if len(cn.Reviews) > 0 {
 		comment = cn.Reviews[len(cn.Reviews)-1].Comment
@@ -252,7 +254,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 			return n, err
 		}
 		n.Reason = domain.ReasonCreate
-		return n, a.tx.PutNode(a.ctx, n)
+		return n, nil
 	}
 	last, ok := a.latest[d.Node]
 	if !ok {
@@ -271,7 +273,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		// branch, seen from it (ADR 0133)
 		n.Parents, n.Reason = append(n.Parents, d.MergedWith.Version), domain.ReasonRebase
 	}
-	return n, a.tx.PutNode(a.ctx, n)
+	return n, nil
 }
 
 // mainImpacts are the impacts of the main flow that count at commit.

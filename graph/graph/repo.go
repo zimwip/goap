@@ -143,18 +143,17 @@ type Tx interface {
 	// change, read by its parent rather than by a scan of every change.
 	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)
 
-	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
-	// node in a change is a draft, the version is written when the change commits.
-	PutNode(ctx context.Context, n domain.Node) error
+	// PutNode writes a node version, with how it holds its links (ADR 0141): the set of an earlier version of the node
+	// as is (Of), or its own rows as a delta over the set of one (Base); the zero set, its own rows. A version is
+	// written once and never changes (ADR 0079): the working state of a node in a change is a draft, the version is
+	// written whole when the change commits, nothing of it set afterwards.
+	PutNode(ctx context.Context, n domain.Node, links LinkSet) error
 	// PutLinks writes links of the sets of versions written in the same transaction (ADR 0141), a whole set in a few
 	// statements; Link reads one, as leaving the version that wrote it.
 	PutLinks(ctx context.Context, ls []domain.Link) error
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
-	// PutLinkSet says how a version written in the same transaction holds its links (ADR 0141): the set of an earlier
-	// version of the node as is (Of), or its own rows as a delta over the set of one (Base); a version left alone
-	// holds its own rows. DropLink writes a row of the delta of a version taking out a link of the set it is a delta
-	// over. LinkSetOf reads how a version holds its links.
-	PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error
+	// DropLink writes a row of the delta of a version taking out a link of the set it is a delta over. LinkSetOf reads
+	// how a version holds its links.
 	DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, dropped domain.Link) error
 	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
 	// LinkSetsOf is LinkSetOf for several versions, in one read: a version that does not exist has no entry.

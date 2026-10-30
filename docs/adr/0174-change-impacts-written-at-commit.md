@@ -131,3 +131,15 @@ commits for the impact withdrawn (`withdrawnImpacts`: the last withdrawn impact 
 again, the impact of the revert it replaces): it names it and the `committed` entry of its commit names the revert,
 which the view of the change, holding the impact no more, leaves aside. `checkVersionImpacts` checks that every version
 of a change names an impact and an entry of its change committing it (the bootstrap's roots aside).
+
+A version is written whole, at once: how it holds its links (ADR 0141: `links`, `links_base`, `links_depth`,
+`links_seq`) is planned before it is written (`Graph.planLinks`, reading only the earlier versions of the node) and
+given with it (`Tx.PutNode(ctx, n, LinkSet)`; `Graph.putVersion` plans, writes the version, then the rows of its set,
+`writeLinks`); there is no `PutLinkSet`, no `UPDATE` of `node_version` on any store. A commit numbers its versions
+first, then writes each with its links once those are resolved to the numbers; a merge plans the links of its versions
+before writing them. The node keeps no latest version (`node.latest` dropped, migration `0033_no_node_latest`, both
+dialects): it was the counter of the numbers of a node's versions across branches, not a head; the greatest version is
+read on the key of `node_version` (`Tx.LatestVersions`, `max(version)`), and two writers giving a node the same next
+version meet on that key (`ErrConflict`), as they met on the compare-and-set of the counter before. The `node` row is
+inserted with the first version and never written again: what it holds (key, type, project, creator) is the node's
+for good.

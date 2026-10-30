@@ -11,13 +11,32 @@ import (
 // bound of the chain a read of the links of a version walks.
 const maxLinkDepth = 16
 
-// putLinks writes the outgoing links of a version written in the transaction (ADR 0141 and its addendum). When one of
-// the versions like (earlier versions of the node: the one it was checked out from first) holds the same links, the
-// version shares its set and writes no row. Else it writes a new set, the next in order after the one the first of like
-// holds (else the previous version): a delta (the links it adds, a row per link it drops) over the set baseSet picks
-// when that delta has fewer rows than its links, else its links whole. A link it keeps keeps its id.
-func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []domain.Link, like ...domain.NodeRef) error {
-	from := n.Ref()
+// linkPlan is how a version holds its links (ADR 0141): its set, written with the version (Tx.PutNode), then the rows
+// of the set, written once the version is.
+type linkPlan struct {
+	set         LinkSet
+	adds, drops []domain.Link
+}
+
+// putVersion writes a version and its outgoing links (ADR 0141 and its addendum): how it holds them is known before
+// the version is written, so the version is written whole, nothing set afterwards (planLinks).
+func (g *Graph) putVersion(ctx context.Context, tx Tx, n domain.Node, links []domain.Link, like ...domain.NodeRef) error {
+	p, err := g.planLinks(ctx, tx, n, links, like...)
+	if err != nil {
+		return err
+	}
+	if err := tx.PutNode(ctx, n, p.set); err != nil {
+		return err
+	}
+	return g.writeLinks(ctx, tx, n, p)
+}
+
+// planLinks says how a version to write holds its outgoing links, reading only the earlier versions of the node. When
+// one of the versions like (earlier versions of the node: the one it was checked out from first) holds the same
+// links, the version shares its set and writes no row. Else it writes a new set, the next in order after the one the
+// first of like holds (else the previous version): a delta (the links it adds, a row per link it drops) over the set
+// baseSet picks when that delta has fewer rows than its links, else its links whole. A link it keeps keeps its id.
+func (g *Graph) planLinks(ctx context.Context, tx Tx, n domain.Node, links []domain.Link, like ...domain.NodeRef) (linkPlan, error) {
 	var prev domain.NodeRef // the version the new set follows
 	for _, ref := range like {
 		if ref.ID != n.ID || ref.Version < 1 || ref.Version >= n.Version {
@@ -28,56 +47,51 @@ func (g *Graph) putLinks(ctx context.Context, tx Tx, n domain.Node, links []doma
 		}
 		held, err := tx.OutLinks(ctx, ref)
 		if err != nil {
-			return err
+			return linkPlan{}, err
 		}
 		if a, d := diffLinks(held, links); len(a) == 0 && len(d) == 0 {
 			set, err := tx.LinkSetOf(ctx, ref)
 			if err != nil {
-				return err
+				return linkPlan{}, err
 			}
-			return tx.PutLinkSet(ctx, from, LinkSet{Of: set.Of, Depth: set.Depth, Seq: set.Seq})
+			return linkPlan{set: LinkSet{Of: set.Of, Depth: set.Depth, Seq: set.Seq}}, nil
 		}
 	}
 	if prev.ID == "" && n.Version > 1 {
 		prev = domain.NodeRef{ID: n.ID, Version: n.Version - 1}
 	}
 	seq := 1
-	var (
-		delta       bool
-		base        LinkSet
-		adds, drops []domain.Link
-	)
 	if prev.ID != "" {
 		set, err := tx.LinkSetOf(ctx, prev)
 		if err != nil {
-			return err
+			return linkPlan{}, err
 		}
 		seq = set.Seq + 1
 		if b, ok, err := baseSet(ctx, tx, prev, set, seq); err != nil {
-			return err
+			return linkPlan{}, err
 		} else if ok && len(links) > 0 {
 			held, err := tx.OutLinks(ctx, domain.NodeRef{ID: n.ID, Version: b.Of})
 			if err != nil {
-				return err
+				return linkPlan{}, err
 			}
 			if a, d := diffLinks(held, links); len(a)+len(d) < len(links) {
-				base, adds, drops, delta = b, a, d, true
+				return linkPlan{set: LinkSet{Base: b.Of, Depth: b.Depth + 1, Seq: seq}, adds: a, drops: d}, nil
 			}
 		}
 	}
-	if !delta {
-		if err := tx.PutLinkSet(ctx, from, LinkSet{Seq: seq}); err != nil {
+	return linkPlan{set: LinkSet{Seq: seq}, adds: links}, nil
+}
+
+// writeLinks writes the rows of the set of a version written in the transaction: the links it adds, a row per link
+// it drops.
+func (g *Graph) writeLinks(ctx context.Context, tx Tx, n domain.Node, p linkPlan) error {
+	from := n.Ref()
+	if len(p.adds) > 0 {
+		if err := tx.PutLinks(ctx, stamped(p.adds, from, n.ChangeID)); err != nil {
 			return err
 		}
-		return tx.PutLinks(ctx, stamped(links, from, n.ChangeID))
 	}
-	if err := tx.PutLinkSet(ctx, from, LinkSet{Base: base.Of, Depth: base.Depth + 1, Seq: seq}); err != nil {
-		return err
-	}
-	if err := tx.PutLinks(ctx, stamped(adds, from, n.ChangeID)); err != nil {
-		return err
-	}
-	for _, l := range drops {
+	for _, l := range p.drops {
 		l.ChangeID = n.ChangeID
 		if err := tx.DropLink(ctx, from, domain.LinkID(g.newID()), l); err != nil {
 			return err

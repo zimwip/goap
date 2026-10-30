@@ -612,10 +612,19 @@ func (t *guardTx) change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
-func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
+func (t *guardTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
 	what := "node " + n.Key + " v" + fmt.Sprint(n.Version)
 	if err := t.needChange(n.ChangeID, what); err != nil {
 		return err
+	}
+	// how it holds its links: over versions of the same node written before it (ADR 0141)
+	for _, v := range []domain.Version{links.Of, links.Base} {
+		if v >= n.Version {
+			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", n.Ref(), v, ErrInvalid)
+		}
+	}
+	if links.Of != 0 && links.Base != 0 {
+		return fmt.Errorf("the links of version %s: a version shares a set or writes a delta, not both: %w", n.Ref(), ErrInvalid)
 	}
 	t.forgetLatest(n.ID)
 	delete(t.keys, nsKey(n.Namespace, n.Key))
@@ -698,7 +707,7 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 		}
 		n.Committed = committed
 	}
-	if err := t.Tx.PutNode(ctx, n); err != nil {
+	if err := t.Tx.PutNode(ctx, n, links); err != nil {
 		return err
 	}
 	if n.Version == 1 {
@@ -743,24 +752,6 @@ func (t *guardTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.
 	}
 	delete(t.wroteLinks, from)
 	return t.Tx.DropLink(ctx, from, row, l)
-}
-
-// PutLinkSet sets how a version written in the transaction holds its links, over versions of the same node written
-// before it (ADR 0141).
-func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
-	if !t.written[from] {
-		return fmt.Errorf("the links of version %s: it is not written by this transaction, a version never changes (ADR 0079): %w", from, ErrConflict)
-	}
-	delete(t.wroteLinks, from)
-	for _, v := range []domain.Version{set.Of, set.Base} {
-		if v >= from.Version {
-			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", from, v, ErrInvalid)
-		}
-	}
-	if set.Of != 0 && set.Base != 0 {
-		return fmt.Errorf("the links of version %s: a version shares a set or writes a delta, not both: %w", from, ErrInvalid)
-	}
-	return t.Tx.PutLinkSet(ctx, from, set)
 }
 
 // logSeq is the entry of the change's log recording the merge: the one reserved, or one the transaction appended.

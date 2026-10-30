@@ -76,10 +76,10 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 			ChangeID: change, CreatedAt: g.now()}
 	}
 	for name, fn := range map[string]func(tx Tx) error{
-		"a node version without a change": func(tx Tx) error { return tx.PutNode(ctx, node("N-1", "")) },
+		"a node version without a change": func(tx Tx) error { return tx.PutNode(ctx, node("N-1", ""), LinkSet{}) },
 		"a node version of a missing change": func(tx Tx) error {
 			return tx.PutNode(ctx, domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Key: "N-2", Type: "Note",
-				ChangeID: domain.ChangeID(g.newID()), Responsible: g.StructureURL(domain.StructureOrganisation, org.Key), Project: g.StructureURL(domain.StructureProject, proj.Key), CreatedAt: g.now()})
+				ChangeID: domain.ChangeID(g.newID()), Responsible: g.StructureURL(domain.StructureOrganisation, org.Key), Project: g.StructureURL(domain.StructureProject, proj.Key), CreatedAt: g.now()}, LinkSet{})
 		},
 		"a link without a change": func(tx Tx) error {
 			return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()}})
@@ -101,12 +101,12 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		"a version owned by a project": func(tx Tx) error {
 			n := node("N-3", org.ChangeID)
 			n.Responsible, n.Project = g.StructureURL(domain.StructureOrganisation, proj.Key), g.StructureURL(domain.StructureProject, proj.Key)
-			return tx.PutNode(ctx, n)
+			return tx.PutNode(ctx, n, LinkSet{})
 		},
 		"a node created in a unit": func(tx Tx) error {
 			n := node("N-4", org.ChangeID)
 			n.Responsible, n.Project = g.StructureURL(domain.StructureOrganisation, org.Key), g.StructureURL(domain.StructureProject, org.Key)
-			return tx.PutNode(ctx, n)
+			return tx.PutNode(ctx, n, LinkSet{})
 		},
 	} {
 		if err := write(fn); !errors.Is(err, ErrInvalid) {
@@ -307,7 +307,7 @@ func testGuardKeepsVersionsImmutable(t *testing.T, repo Repo) {
 		Key: "N-1", Type: "Note", ChangeID: boot.ID, CreatedAt: g.now(), Committed: -1}
 	link := domain.Link{ID: domain.LinkID(g.newID()), Type: "refines", From: node.Ref(), To: node.Ref(), ChangeID: boot.ID}
 	if err := write(func(tx Tx) error {
-		if err := tx.PutNode(ctx, node); err != nil {
+		if err := tx.PutNode(ctx, node, LinkSet{}); err != nil {
 			return err
 		}
 		return tx.PutLinks(ctx, []domain.Link{link})

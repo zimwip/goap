@@ -724,39 +724,9 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 	}
-	for _, events := range phases[:3] {
-		if err := g.emit(ctx, tx, events...); err != nil {
-			return res, err
-		}
-	}
-	// the entry of the commit of the merge, its position reserved first: its versions name it, the commits the target
-	// takes are recorded by it
-	var seq int64
-	if len(phases[3]) > 0 {
-		var err error
-		if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
-			return res, err
-		}
-		for _, n := range writes {
-			n.LogSeq = seq
-			if err := tx.PutNode(ctx, n); err != nil {
-				return res, err
-			}
-		}
-		if err := g.emitAt(ctx, tx, seq, phases[3]...); err != nil {
-			return res, err
-		}
-	}
-
-	if len(stuck) > 0 {
-		return res, invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", strings.Join(stuck, ", "))
-	}
-	// the target takes the commits of the source (ADR 0176): the versions joined as they are, the others outrun by the
-	// merge's own versions, written at the same order
-	if err := takeCommits(ctx, tx, namespace, plan.Into, in.From, c.ID, seq, joined); err != nil {
-		return res, err
-	}
-	// 2. their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions
+	// their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions, planned before the
+	// versions are written so that each is written whole (ADR 0174 addendum)
+	plans := map[domain.NodeID]linkPlan{}
 	newRef := map[domain.NodeID]domain.NodeRef{}
 	for _, m := range todo {
 		newRef[m.next.ID] = m.next
@@ -774,9 +744,11 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			for i := range links {
 				links[i].ID = domain.LinkID(g.newID())
 			}
-			if err := g.putLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version, ChangeID: c.ID}, links, m.ours.Ref()); err != nil {
+			p, err := g.planLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version}, links, m.ours.Ref())
+			if err != nil {
 				return res, err
 			}
+			plans[m.next.ID] = p
 			continue
 		}
 		theirs, err := tx.OutLinks(ctx, m.from.Ref())
@@ -816,9 +788,46 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if m.ours != nil {
 			like = []domain.NodeRef{m.ours.Ref(), m.from.Ref()}
 		}
-		if err := g.putLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version, ChangeID: c.ID}, links, like...); err != nil {
+		p, err := g.planLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version}, links, like...)
+		if err != nil {
 			return res, err
 		}
+		plans[m.next.ID] = p
+	}
+	for _, events := range phases[:3] {
+		if err := g.emit(ctx, tx, events...); err != nil {
+			return res, err
+		}
+	}
+	// the entry of the commit of the merge, its position reserved first: its versions name it, the commits the target
+	// takes are recorded by it
+	var seq int64
+	if len(phases[3]) > 0 {
+		var err error
+		if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
+			return res, err
+		}
+		for _, n := range writes {
+			n.LogSeq = seq
+			if err := tx.PutNode(ctx, n, plans[n.ID].set); err != nil {
+				return res, err
+			}
+			if err := g.writeLinks(ctx, tx, n, plans[n.ID]); err != nil {
+				return res, err
+			}
+		}
+		if err := g.emitAt(ctx, tx, seq, phases[3]...); err != nil {
+			return res, err
+		}
+	}
+
+	if len(stuck) > 0 {
+		return res, invalidf("the change leaves nodes in a state that cannot commit, move them to a committable state first: %s", strings.Join(stuck, ", "))
+	}
+	// the target takes the commits of the source (ADR 0176): the versions joined as they are, the others outrun by the
+	// merge's own versions, written at the same order
+	if err := takeCommits(ctx, tx, namespace, plan.Into, in.From, c.ID, seq, joined); err != nil {
+		return res, err
 	}
 	res.Commit = domain.Commit{ID: res.Commit.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Kind: domain.CommitKindMerge, Nodes: target, CreatedAt: g.now()}
 	if err := tx.PutCommit(ctx, res.Commit); err != nil {

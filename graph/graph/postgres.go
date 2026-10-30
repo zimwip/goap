@@ -1150,41 +1150,28 @@ func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain
 	return out, nil
 }
 
-func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
+func (t *pgTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
+	args := versionArgs(n, links)
 	if t.held != nil {
-		if t.held.holdVersion(n, versionArgs(n)) {
-			return nil
-		}
-		if err := t.held.flush(ctx); err != nil {
-			return err
-		}
-		t.held.holdVersion(n, versionArgs(n))
+		t.held.holdVersion(n, args)
 		return nil
 	}
 	if n.Version == 1 {
-		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project, creator, creator_unit) VALUES ($1, $2, $3, $4, 1, $5, $6, $7)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String(), n.Creator.Subject, n.Creator.Unit.String()); err != nil {
+		if _, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node", nodeColumns, ""), nodeArgs(n)...); err != nil {
 			return mapErr(err, "node "+n.Key)
 		}
-	} else {
-		tag, err := t.tx.Exec(ctx, `UPDATE node SET latest = $2 WHERE id = $1 AND latest = $2 - 1`, string(n.ID), int(n.Version))
-		if err != nil {
-			return mapErr(err, "node "+n.Ref().String())
-		}
-		if tag.RowsAffected() != 1 {
-			return fmt.Errorf("node %s: not the next version: %w", n.Ref(), ErrConflict)
-		}
 	}
-	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""), versionArgs(n)...)
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""), args...)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
 // versionArgs are the arguments of a node_version row, in the order of nodeVersionColumns.
-func versionArgs(n domain.Node) []any {
+func versionArgs(n domain.Node, links LinkSet) []any {
 	parents := make([]int32, len(n.Parents))
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	return []any{string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility, nullSeq(n.LogSeq)}
+	return append([]any{string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility, nullSeq(n.LogSeq)}, linkSetArgs(n, links)...)
 }
 
 // exec1 runs a statement that must touch exactly one row (ErrNotFound otherwise).
@@ -1241,21 +1228,6 @@ func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.Lin
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
 		string(row), l.Type, string(from.ID), int(from.Version), to, tv, jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return mapErr(err, "link")
-}
-
-func (t *pgTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
-	var of, base any
-	if set.Of != 0 && set.Of != from.Version {
-		of = int(set.Of)
-	}
-	if set.Base != 0 {
-		base = int(set.Base)
-	}
-	if t.held != nil && t.held.holdLinkSet(from, [4]any{of, base, set.Depth, set.Seq}) {
-		return nil
-	}
-	_, err := t.tx.Exec(ctx, dialectPG.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth, set.Seq)
-	return mapErr(err, "link set")
 }
 
 func (t *pgTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
@@ -1628,9 +1600,6 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 	}
 	for _, n := range nodes {
 		if _, err := t.tx.Exec(ctx, d.sqlDeleteOrphanNode(), n); err != nil {
-			return mapErr(err, "node "+n)
-		}
-		if _, err := t.tx.Exec(ctx, d.sqlRefreshLatest(), n); err != nil {
 			return mapErr(err, "node "+n)
 		}
 	}

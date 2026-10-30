@@ -282,10 +282,7 @@ func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change do
 	} else {
 		n.Properties, n.State, n.Deleted = cloneMap(latest.Properties), latest.State, true
 	}
-	if err := tx.PutNode(ctx, n); err != nil {
-		return domain.Node{}, err
-	}
-	if err := g.putLinks(ctx, tx, n, links, like...); err != nil {
+	if err := g.putVersion(ctx, tx, n, links, like...); err != nil {
 		return domain.Node{}, err
 	}
 	return n, nil

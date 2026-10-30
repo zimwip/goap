@@ -578,7 +578,7 @@ func (t *memTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domai
 	return out, nil
 }
 
-func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
+func (t *memTx) PutNode(_ context.Context, n domain.Node, links LinkSet) error {
 	if err := t.write(); err != nil {
 		return err
 	}
@@ -599,6 +599,12 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 		n.Creator = vs[0].Creator
 	}
 	t.st.versions[n.ID] = append(vs, n)
+	if links != (LinkSet{}) {
+		if links.Of == 0 {
+			links.Of = n.Version
+		}
+		t.st.sets[n.Ref()] = links
+	}
 	return nil
 }
 
@@ -632,17 +638,6 @@ func (t *memTx) DropLink(_ context.Context, from domain.NodeRef, row domain.Link
 		return err
 	}
 	t.st.drops = append(t.st.drops, memDrop{row: row, from: from, removes: l.ID, to: l.To, change: l.ChangeID})
-	return nil
-}
-
-func (t *memTx) PutLinkSet(_ context.Context, from domain.NodeRef, set LinkSet) error {
-	if err := t.write(); err != nil {
-		return err
-	}
-	if set.Of == 0 {
-		set.Of = from.Version
-	}
-	t.st.sets[from] = set
 	return nil
 }
 

@@ -65,7 +65,7 @@ func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	}
 	n.ChangeID = c.ID
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if err := tx.PutNode(ctx, n); err != nil {
+		if err := tx.PutNode(ctx, n, LinkSet{}); err != nil {
 			return err
 		}
 		for _, l := range in.Links {
