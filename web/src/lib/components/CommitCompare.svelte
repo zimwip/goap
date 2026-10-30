@@ -9,17 +9,24 @@
   import ChangeStackView from './ChangeStackView.svelte';
   import ValueDiff from './ValueDiff.svelte';
   import { openNode } from '../nodeEditors';
+  import type { Snippet } from 'svelte';
 
   /** candidates: the commits offered as "from" (the history the caller read), newest last */
   let {
     commit,
     candidates = [],
     from = $bindable(''),
+    collapsed = false,
+    actions,
   }: {
     commit: Commit;
     candidates?: Commit[];
     /** the commit compared with (its id, `∅` the empty state): the parent of the commit unless the host picks another */
     from?: string;
+    /** only the head is shown (the host shrank the panel) */
+    collapsed?: boolean;
+    /** the host's buttons, at the end of the head (enlarge, shrink...) */
+    actions?: Snippet;
   } = $props();
 
   const others = $derived(candidates.filter((x) => x.id !== commit.id).reverse());
@@ -77,7 +84,9 @@
     </select>
     <span>to this commit</span>
     {#if diff}<span class="hint">{diff.length} node(s) differ</span>{/if}
+    {#if actions}<span class="grow"></span>{@render actions()}{/if}
   </div>
+  {#if !collapsed}
   {#if error}<div class="alert">{error}</div>{/if}
   {#if added.length || removed.length}
     <p class="explained">
@@ -116,6 +125,7 @@
   {:else if diff}
     <p class="empty">The two commits hold the same versions.</p>
   {/if}
+  {/if}
 </section>
 
 <style>
@@ -141,6 +151,9 @@
   }
   .head h3 {
     margin: 0;
+  }
+  .head .grow {
+    flex: 1;
   }
   .head select {
     width: auto;

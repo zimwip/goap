@@ -62,15 +62,20 @@
     save(HW_KEY, v);
   }
 
-  // Compare panel: a third of the page by default, resizable and then remembered
+  // Compare panel: a third of the page by default, resizable up to all but the page's head and then remembered;
+  // enlarged to the whole page or shrunk to its head, and back, from its own buttons
   let pageHeight = $state(0);
   let compareHeightSet = $state(typeof loadRaw(CH_KEY) === 'number' ? (loadRaw(CH_KEY) as number) : 0);
-  const compareMax = $derived(Math.max(120, Math.min(600, Math.floor(pageHeight * 0.7))));
+  const compareMax = $derived(Math.max(120, pageHeight - 160));
   const compareShown = $derived(Math.min(compareHeightSet || Math.round(pageHeight / 3) || 220, compareMax));
+  /** normal: its height; max: the whole page below the head; min: its head only */
+  let compareSize = $state<'normal' | 'max' | 'min'>('normal');
   function resizeCompare(v: number) {
     compareHeightSet = v;
+    compareSize = 'normal';
     save(CH_KEY, v);
   }
+  const toggleCompare = (to: 'max' | 'min') => (compareSize = compareSize === to ? 'normal' : to);
 
   let reload = $state(0);
   let loading = $state(false);
@@ -451,7 +456,7 @@
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
 
-  <div class="workspace">
+  <div class="workspace" hidden={!!commit && compareSize === 'max'}>
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{branchName}</span></h3>
       <div class="htools">
@@ -675,9 +680,28 @@
     </div>
   </div>
   {#if commit}
-  <Resizer orientation="horizontal" value={compareShown} min={120} max={compareMax} invert label="Compare panel height" onresize={resizeCompare} />
-  <div class="compare-wrap" style:height="{compareShown}px">
-    <CommitCompare {commit} candidates={commits} bind:from={compareFrom} />
+  {#if compareSize === 'normal'}
+    <Resizer orientation="horizontal" value={compareShown} min={120} max={compareMax} invert label="Compare panel height" onresize={resizeCompare} />
+  {/if}
+  <div class="compare-wrap" class:max={compareSize === 'max'} style:height={compareSize === 'normal' ? `${compareShown}px` : null}>
+    <CommitCompare {commit} candidates={commits} bind:from={compareFrom} collapsed={compareSize === 'min'}>
+      {#snippet actions()}
+        <button
+          type="button"
+          class="ghost small"
+          title={compareSize === 'min' ? 'Restore the Compare panel' : 'Shrink the Compare panel to its head'}
+          aria-label={compareSize === 'min' ? 'Restore the Compare panel' : 'Shrink the Compare panel'}
+          aria-pressed={compareSize === 'min'}
+          onclick={() => toggleCompare('min')}><Icon name={compareSize === 'min' ? 'chevronUp' : 'chevronDown'} size={14} /></button>
+        <button
+          type="button"
+          class="ghost small"
+          title={compareSize === 'max' ? 'Restore the Compare panel' : 'Enlarge the Compare panel to the whole page'}
+          aria-label={compareSize === 'max' ? 'Restore the Compare panel' : 'Enlarge the Compare panel'}
+          aria-pressed={compareSize === 'max'}
+          onclick={() => toggleCompare('max')}><Icon name={compareSize === 'max' ? 'minimize' : 'maximize'} size={14} /></button>
+      {/snippet}
+    </CommitCompare>
   </div>
 {/if}
 </div>
@@ -703,6 +727,12 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+  .compare-wrap.max {
+    flex: 1;
+  }
+  .workspace[hidden] {
+    display: none;
   }
   .workspace {
     flex: 1;
