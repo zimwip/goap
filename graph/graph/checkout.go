@@ -251,7 +251,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	var v domain.Version
 	inBase := false
 	if nid != "" {
-		at, err := versionsAt(ctx, tx, w.c.ForkCommit, []domain.NodeID{nid})
+		at, err := referenceVersions(ctx, tx, w.c, []domain.NodeID{nid})
 		if err != nil {
 			return nil, err
 		}
@@ -726,7 +726,7 @@ func (g *Graph) prefetchCheckouts(ctx context.Context, tx Tx, id domain.ChangeID
 	if err != nil {
 		return err
 	}
-	at, err := versionsAt(ctx, tx, w.c.ForkCommit, ids)
+	at, err := referenceVersions(ctx, tx, w.c, ids)
 	if err != nil {
 		return err
 	}

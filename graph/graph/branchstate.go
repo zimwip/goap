@@ -19,14 +19,50 @@ import (
 
 // branchVersions reads the versions some nodes (nil: every node) have on the branch of a change, the nodes it does not
 // hold left out.
+//
+// The commits the branch shares with its target (its base, ADR 0177) are commits it holds: the greatest of all it holds
+// is read over its fork alone, the base read only for the nodes a revert gives back to it.
 func branchVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	fork, err := forkVersions(ctx, tx, b, ids)
-	if err != nil {
-		return nil, err
+	var fork map[domain.NodeID]domain.Version
+	if ids != nil {
+		at, err := versionsAt(ctx, tx, b.ForkCommit, ids)
+		if err != nil {
+			return nil, err
+		}
+		fork = maps.Clone(at)
+	} else if b.ForkCommit != "" {
+		at, err := tx.Commit(ctx, b.ForkCommit)
+		if err != nil {
+			return nil, err
+		}
+		fork = maps.Clone(at.Nodes)
 	}
 	ls, err := tx.BranchCommits(ctx, b.Namespace, b.Name, math.MaxInt64, ids)
 	if err != nil {
 		return nil, err
+	}
+	var reverts []domain.NodeID
+	for id, l := range ls {
+		if l.Revert {
+			reverts = append(reverts, id)
+		}
+	}
+	if len(reverts) > 0 {
+		slices.Sort(reverts)
+		base, err := baseVersions(ctx, tx, b, reverts)
+		if err != nil {
+			return nil, err
+		}
+		if fork == nil {
+			fork = map[domain.NodeID]domain.Version{}
+		}
+		for _, id := range reverts {
+			if v, ok := base[id]; ok {
+				fork[id] = v
+			} else {
+				delete(fork, id)
+			}
+		}
 	}
 	return overFork(fork, ls), nil
 }
@@ -51,28 +87,67 @@ func overFork(fork map[domain.NodeID]domain.Version, ls map[domain.NodeID]Commit
 	return out
 }
 
-// forkVersions reads the versions some nodes (nil: every node) have in the fork of the branch of a change.
-func forkVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+// baseVersions reads the versions some nodes (nil: every node) have in the base of the branch of a change (ADR 0177):
+// the commits it holds that its target holds too (the target as the branch last took it, and what the branch merged into
+// it), over the view of its parent at its fork. It is what the branch stands on: a three-way merge's base, what a revert
+// gives back.
+func baseVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	var out map[domain.NodeID]domain.Version
 	if ids != nil {
-		return versionsAt(ctx, tx, b.ForkCommit, ids)
+		fork, err := versionsAt(ctx, tx, b.ForkCommit, ids)
+		if err != nil {
+			return nil, err
+		}
+		out = maps.Clone(fork)
+	} else if b.ForkCommit != "" {
+		fork, err := tx.Commit(ctx, b.ForkCommit)
+		if err != nil {
+			return nil, err
+		}
+		out = maps.Clone(fork.Nodes)
 	}
-	fork, err := tx.Commit(ctx, b.ForkCommit)
+	if out == nil {
+		out = map[domain.NodeID]domain.Version{}
+	}
+	if b.Parent == "" || (ids != nil && len(ids) == 0) {
+		return out, nil
+	}
+	shared, err := tx.SharedCommits(ctx, b.Namespace, b.Name, b.Parent, ids)
 	if err != nil {
 		return nil, err
 	}
-	out := maps.Clone(fork.Nodes)
-	if out == nil {
-		out = map[domain.NodeID]domain.Version{}
+	for id, l := range shared {
+		if l.Deleted {
+			delete(out, id)
+		} else {
+			out[id] = l.Version
+		}
 	}
 	return out, nil
 }
 
+// referenceVersions reads some nodes in the reference commit of a change: what its branch stands on (its fork and the
+// commits it took of its target, baseVersions, ADR 0177), else its fork.
+func referenceVersions(ctx context.Context, tx Tx, c domain.Change, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return versionsAt(ctx, tx, c.ForkCommit, ids)
+	}
+	return baseVersions(ctx, tx, own, ids)
+}
+
 // onto is what the branch of a change is rebased onto and merged into: the head of the branch it was forked from, a
-// lasting branch or the branch of its parent change (ADR 0103).
+// lasting branch or the branch of its parent change (ADR 0103), and where the branch stands on it (ADR 0177).
 type onto struct {
 	parent domain.Branch
 	// head is the head of the parent: for the branch of a change, its head commit, else its fork (Branch.HeadOrFork)
 	head domain.CommitID
+	// pos is the position of the branch on the parent (Tx.Position), last the last order of the parent: the branch is
+	// up to date when it holds the parent's last commit (pos == last)
+	pos, last int64
 }
 
 // ontoOf reads what the branch of a change is forked from, as it stands now.
@@ -81,11 +156,36 @@ func ontoOf(ctx context.Context, tx Tx, own domain.Branch) (onto, error) {
 	if err != nil {
 		return onto{}, err
 	}
+	o := onto{parent: p}
 	if p.Ephemeral {
-		return onto{parent: p, head: p.HeadOrFork()}, nil
+		o.head = p.HeadOrFork()
+		if o.last, err = tx.LastCommit(ctx, p.Name); err != nil {
+			return onto{}, err
+		}
+	} else {
+		// a lasting branch is shared by the namespaces: its last order in this one is the order of its head
+		h, err := branchHeadHeader(ctx, tx, own.Namespace, p.Name)
+		if err != nil {
+			return onto{}, err
+		}
+		o.head, o.last = h.ID, h.Seq
 	}
-	h, err := branchHeadHeader(ctx, tx, own.Namespace, p.Name)
-	return onto{parent: p, head: h.ID}, err
+	return o, o.position(ctx, tx, own)
+}
+
+// position reads where the branch own stands on the parent of o.
+func (o *onto) position(ctx context.Context, tx Tx, own domain.Branch) error {
+	var forkSeq int64
+	if own.ForkCommit != "" {
+		f, err := headerOf(ctx, tx, own.ForkCommit)
+		if err != nil {
+			return err
+		}
+		forkSeq = f.Seq
+	}
+	var err error
+	o.pos, err = tx.Position(ctx, own.Name, o.parent.Name, forkSeq)
+	return err
 }
 
 // versions reads some nodes (nil: every node) in what the branch is forked from now.
@@ -100,20 +200,12 @@ func (o onto) versions(ctx context.Context, tx Tx, ids []domain.NodeID) (map[dom
 	return versionsAt(ctx, tx, o.head, ids)
 }
 
-// moved reports whether what the branch own is forked from moved since its fork: the head of its parent branch.
-func (o onto) moved(_ context.Context, _ Tx, own domain.Branch) (bool, error) {
-	return o.head != own.ForkCommit, nil
+// moved reports whether what the branch is forked from moved past what the branch took of it (ADR 0177).
+func (o onto) moved(_ context.Context, _ Tx, _ domain.Branch) (bool, error) {
+	return o.pos < o.last, nil
 }
 
-// forkOn moves the fork of a branch to what it is forked from now (a rebase, ADR 0101).
-func (o onto) forkOn(ctx context.Context, tx Tx, own *domain.Branch) error {
-	if own.RebasedFrom == "" {
-		own.RebasedFrom = own.ForkCommit
-	}
-	return o.forkOnHead(ctx, tx, own)
-}
-
-// forkOnHead forks a branch from what o is now: its head, read when o has none.
+// forkOnHead forks a new branch from what o is now: its head, read when o has none.
 func (o onto) forkOnHead(ctx context.Context, tx Tx, own *domain.Branch) error {
 	if o.head == "" {
 		if o.parent.Ephemeral {
@@ -168,84 +260,117 @@ func (g *Graph) commitOwn(ctx context.Context, tx Tx, own *domain.Branch, b doma
 	return b, nil
 }
 
-// forkMoved records the move of the fork of the branch of a change (a rebase that only moves the fork, ADR 0140; the
-// fork after a merge, ADR 0166; a new parent, ADR 0106) as a commit of the branch, once it committed something: its
-// head then stands on the new fork (ADR 0175). A branch nothing committed on yet is its fork, no commit says it.
-func (g *Graph) forkMoved(ctx context.Context, tx Tx, c domain.Change, own *domain.Branch, from domain.CommitID) error {
-	if err := tx.PutBranch(ctx, *own); err != nil {
-		return err
-	}
-	cur, err := tx.Branch(ctx, own.Namespace, own.Name)
-	if err != nil {
-		return err
-	}
-	*own = cur
-	if cur.Head == "" || cur.ForkCommit == from {
+// takeTarget brings the branch of a change up to what it is forked from (ADR 0177): the branch takes, as rows, the
+// commits its parent holds past its position, recorded by a change.updated entry naming the head taken
+// (HeaderRebasedOnto); its fork never moves, nothing is updated. A revert of the branch whose node the commits taken
+// moved is written again over them (a revert is the copy of what the branch stands on, ADR 0176), in one commit of the
+// branch: the only commit a rebase with no conflict writes. own and to follow.
+func (g *Graph) takeTarget(ctx context.Context, tx Tx, c domain.Change, own *domain.Branch, to *onto) error {
+	if to.pos >= to.last {
 		return nil
 	}
-	reverts, seq, err := g.refreshReverts(ctx, tx, c, cur, from)
+	// the reverts of the branch, and what they stand on before the commits are taken
+	var reverts []domain.NodeID
+	var before map[domain.NodeID]domain.Version
+	if own.Head != "" {
+		mine, err := tx.BranchNodeIDs(ctx, own.Name, own.Parent)
+		if err != nil {
+			return err
+		}
+		// a revert is of a node no impact of the change holds any more (withdrawn after its commit, withdrawnSince)
+		held := map[domain.NodeID]bool{}
+		for _, cn := range mainImpactsOf(c).All() {
+			held[nodeOf(cn)] = true
+		}
+		mine = slices.DeleteFunc(mine, func(id domain.NodeID) bool { return held[id] })
+		if len(mine) > 0 {
+			ls, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, mine)
+			if err != nil {
+				return err
+			}
+			for id, l := range ls {
+				if l.Revert {
+					reverts = append(reverts, id)
+				}
+			}
+		}
+		if len(reverts) > 0 {
+			slices.Sort(reverts)
+			if before, err = baseVersions(ctx, tx, *own, reverts); err != nil {
+				return err
+			}
+		}
+	}
+	seqs, err := tx.JoinedCommits(ctx, own.Namespace, to.parent.Name, "", to.pos, to.last)
 	if err != nil {
 		return err
 	}
-	b, err := g.commitOwn(ctx, tx, own, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindRebase, MergedFrom: cur.ForkCommit, RebasedFrom: from})
-	if err != nil || len(reverts) == 0 {
+	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderRebasedOnto: {To: string(to.head)}}})
+	if err != nil {
+		return err
+	}
+	e, err = tx.AppendLog(ctx, e)
+	if err != nil {
+		return err
+	}
+	if err := takeRows(ctx, tx, own.Name, c.ID, e.Seq, seqs); err != nil {
+		return err
+	}
+	to.pos = to.last
+	if len(reverts) == 0 {
+		return nil
+	}
+	after, err := baseVersions(ctx, tx, *own, reverts)
+	if err != nil {
+		return err
+	}
+	var wrote []domain.Node
+	var seq int64
+	for _, id := range reverts {
+		if before[id] == after[id] {
+			continue
+		}
+		if seq == 0 {
+			if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
+				return err
+			}
+		}
+		// the impact the revert commits for: the one of the revert it replaces
+		n, err := g.writeRevert(ctx, tx, own.Name, c.ID, "", seq, id, after[id], "reverted again over the commits taken by a rebase")
+		if err != nil {
+			return err
+		}
+		wrote = append(wrote, n)
+	}
+	if len(wrote) == 0 {
+		return nil
+	}
+	b, err := g.commitOwn(ctx, tx, own, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindRebase, MergedFrom: to.head})
+	if err != nil {
 		return err
 	}
 	// the reverts written again commit for their impacts, in the entry they name (ADR 0174 addendum)
-	committed := make([]domain.ImpactEvent, len(reverts))
-	for i, n := range reverts {
+	committed := make([]domain.ImpactEvent, len(wrote))
+	for i, n := range wrote {
 		ref := n.Ref()
 		committed[i] = domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: b.ID, Branch: domain.BranchOf(own.Name)}
 	}
 	return g.emitAt(ctx, tx, seq, committed...)
 }
 
-// refreshReverts writes again, over the new fork of the branch of a change, the reverts the branch holds of the nodes
-// the fork moved (ADR 0176): a revert is a version like any other, a copy of the version of the fork it puts back, and a
-// branch taking the commits of the change reads it as it is, so it must stay the copy of the fork the branch stands on.
-// The new versions commit in the commit recording the move, named by the log entry at the position returned.
-func (g *Graph) refreshReverts(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, from domain.CommitID) ([]domain.Node, int64, error) {
-	ls, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, nil)
+// catchUp makes the new branch of a sub-change take what the branch of its parent took past the commit it is forked
+// from (ADR 0177 §9): the sub-change starts from its parent's branch as it stands.
+func (g *Graph) catchUp(ctx context.Context, tx Tx, c domain.Change) error {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil || !ok || own.Parent == "" {
+		return err
+	}
+	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
-		return nil, 0, err
+		return err
 	}
-	var ids []domain.NodeID
-	for id, l := range ls {
-		if l.Revert {
-			ids = append(ids, id)
-		}
-	}
-	if len(ids) == 0 {
-		return nil, 0, nil
-	}
-	slices.Sort(ids)
-	before, err := versionsAt(ctx, tx, from, ids)
-	if err != nil {
-		return nil, 0, err
-	}
-	after, err := versionsAt(ctx, tx, own.ForkCommit, ids)
-	if err != nil {
-		return nil, 0, err
-	}
-	var wrote []domain.Node
-	var seq int64
-	for _, id := range ids {
-		if before[id] == after[id] {
-			continue
-		}
-		if seq == 0 {
-			if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
-				return nil, 0, err
-			}
-		}
-		// the impact the revert commits for: the one of the revert it replaces
-		n, err := g.writeRevert(ctx, tx, own.Name, c.ID, "", seq, id, after[id], "reverted again over the new fork of the change")
-		if err != nil {
-			return nil, 0, err
-		}
-		wrote = append(wrote, n)
-	}
-	return wrote, seq, nil
+	return g.takeTarget(ctx, tx, c, &own, &to)
 }
 
 // writeRevert writes on the branch of a change a revert of a node: a version with the properties and links of the

@@ -136,6 +136,10 @@ func (g *Graph) reviewRebased(ctx context.Context, tx Tx, c domain.Change, nodes
 // HeaderForkCommit is the field of a change.updated log entry that records the move of a rebase (ADR 0101).
 const HeaderForkCommit = "forkCommit"
 
+// HeaderRebasedOnto is the field of a change.updated log entry that records a rebase taking the commits of what the
+// change is forked from, up to the head it names (ADR 0177): the entry the rows taken name (branch_commit.log_seq).
+const HeaderRebasedOnto = "rebasedOnto"
+
 // storedDraft is a stored version seen as a draft, with its outgoing links: what a three-way merge compares.
 func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Draft, error) {
 	return g.storedVersion(ctx, tx, ref, true)

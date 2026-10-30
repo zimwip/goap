@@ -549,8 +549,8 @@ func (t *sqliteTx) NextCommit(ctx context.Context) (int64, error) {
 	return r.commit, nil
 }
 
-func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
-	q, args := dialectSQLite.sqlBranchNodeIDs(branch)
+func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch, except string) ([]domain.NodeID, error) {
+	q, args := dialectSQLite.sqlBranchNodeIDs(branch, except)
 	ids, err := t.ids(ctx, q, args...)
 	out := make([]domain.NodeID, len(ids))
 	for i, id := range ids {
@@ -992,8 +992,8 @@ func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain
 	return sqliteErr(err, "branch "+branch)
 }
 
-func (t *sqliteTx) JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error) {
-	q, args := dialectSQLite.sqlJoinedCommits(branch, after, upTo)
+func (t *sqliteTx) JoinedCommits(ctx context.Context, namespace, branch, except string, after, upTo int64) ([]int64, error) {
+	q, args := dialectSQLite.sqlJoinedCommits(namespace, branch, except, after, upTo)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1265,6 +1265,37 @@ func (t *sqliteTx) StoreCounts(ctx context.Context, namespace string) (map[strin
 		out[measure] = counts
 	}
 	return out, nil
+}
+
+func (t *sqliteTx) SharedCommits(ctx context.Context, namespace, branch, other string, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	if ids != nil && len(ids) == 0 {
+		return map[domain.NodeID]CommittedVersion{}, nil
+	}
+	q, args := dialectSQLite.sqlSharedVersions(namespace, branch, other, ids)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[domain.NodeID]CommittedVersion{}
+	for rows.Next() {
+		var nid, reason, on string
+		var v int
+		var cv CommittedVersion
+		if err := rows.Scan(&nid, &v, &cv.Deleted, &reason, &on); err != nil {
+			return nil, err
+		}
+		cv.Version = domain.Version(v)
+		out[domain.NodeID(nid)] = cv
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) Position(ctx context.Context, branch, target string, forkSeq int64) (int64, error) {
+	q, args := dialectSQLite.sqlPosition(branch, target, forkSeq)
+	var at int64
+	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&at)
+	return at, err
 }
 
 func (t *sqliteTx) LastCommit(ctx context.Context, branch string) (int64, error) {

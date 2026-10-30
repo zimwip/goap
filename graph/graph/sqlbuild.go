@@ -282,10 +282,25 @@ func (d dialect) materialized() string {
 	return ``
 }
 
-// sqlJoinedCommits reads the orders of the commits a branch took from the order after up to upTo (ADR 0176).
-func (d dialect) sqlJoinedCommits(branch string, after, upTo int64) (string, []any) {
-	return `SELECT seq FROM branch_commit WHERE branch = ` + d.ph(1) + ` AND at > ` + d.ph(2) + ` AND at <= ` + d.ph(3) + ` ORDER BY seq`,
-		[]any{domain.BranchOf(branch), after, upTo}
+// sqlJoinedCommits reads the orders of the commits a branch holds from the order after up to upTo (ADR 0176), the ones
+// the branch except holds left out ("": none, ADR 0177), asked by their key.
+func (d dialect) sqlJoinedCommits(namespace, branch, except string, after, upTo int64) (string, []any) {
+	ex := ""
+	if except != "" {
+		ex = domain.BranchOf(except)
+	}
+	return `SELECT j.seq FROM branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch = ` + d.ph(1) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) +
+			` AND c.namespace = ` + d.ph(5) + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + d.ph(4) + ` AND e.seq = j.seq` + d.fence() + `) ORDER BY j.seq`,
+		[]any{domain.BranchOf(branch), after, upTo, ex, domain.NamespaceOf(namespace)}
+}
+
+// fence keeps a probe of a sublink by its key on PostgreSQL (OFFSET 0): a generic plan would otherwise turn it into a
+// join reading the probed branch's rows whole.
+func (d dialect) fence() string {
+	if d.pg {
+		return " OFFSET 0"
+	}
+	return ""
 }
 
 // sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, the log entry recording it, then
@@ -331,13 +346,70 @@ func (d dialect) sqlLastCommit(branch string) (string, []any) {
 // each commit read by its order (node_version_commit: an order is one commit's). On PostgreSQL the versions of a commit
 // are a fence (LATERAL, OFFSET 0): the commits of the branch are walked, never the versions, whatever the plan the
 // statistics of a young table or of main (most of the commits) would make of a join.
-func (d dialect) sqlBranchNodeIDs(branch string) (string, []any) {
+// A commit the branch except holds is left out (ADR 0177: what a change did is what its branch holds that its target
+// does not; "" leaves none out), asked of branch_commit_pkey by its key.
+func (d dialect) sqlBranchNodeIDs(branch, except string) (string, []any) {
+	args := []any{domain.BranchOf(branch), domain.BranchOf(except)}
+	if except == "" {
+		args[1] = ""
+	}
 	if d.pg {
 		return `SELECT DISTINCT v.node_id::text FROM branch_commit j CROSS JOIN LATERAL (SELECT v.node_id FROM node_version v WHERE v.committed = j.seq OFFSET 0) v
-		WHERE j.branch = $1`, []any{domain.BranchOf(branch)}
+		WHERE j.branch = $1 AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = $2 AND e.seq = j.seq OFFSET 0)`, args
 	}
 	return `SELECT DISTINCT v.node_id FROM branch_commit j JOIN node_version v ON v.committed = j.seq
-		WHERE j.branch = ?1`, []any{domain.BranchOf(branch)}
+		WHERE j.branch = ?1 AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ?2 AND e.seq = j.seq)`, args
+}
+
+// sqlPosition reads the position of a branch on its target (ADR 0177): the greatest order, on the target, of the
+// target's commits the branch holds, or of its fork (its order forkSeq, 0: none); 0 when there is none. The rows of the
+// branch are walked, each target's row asked by its key.
+func (d dialect) sqlPosition(branch, target string, forkSeq int64) (string, []any) {
+	// a scalar probe per row of the branch: a generic plan never reads the target's rows whole (they grow with it)
+	return `SELECT coalesce(max(x), 0) FROM (
+		SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + d.ph(2) + ` AND p.seq = b.seq) AS x FROM branch_commit b WHERE b.branch = ` + d.ph(1) + `
+		UNION ALL SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + d.ph(2) + ` AND p.seq = ` + d.ph(3) + `)
+	) y`, []any{domain.BranchOf(branch), domain.BranchOf(target), forkSeq}
+}
+
+// latestShared is latestHeld for the commits two branches both hold (ADR 0177: the base of a change's branch, the
+// commits of its target it took and its own its target took), with no bound of order.
+func (d dialect) latestShared(node, branch, other string) string {
+	probe := func(b string) string {
+		s := `EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + b + ` AND j.seq = v.committed`
+		if d.pg {
+			s += ` OFFSET 0`
+		}
+		return s + `)`
+	}
+	bound := func(f string) string {
+		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branch + `)`
+	}
+	return `(SELECT v.version FROM node_version v WHERE v.node_id = ` + node + ` AND v.committed BETWEEN ` + bound("min") +
+		` AND ` + bound("max") + ` AND ` + probe(branch) + ` AND ` + probe(other) + ` ORDER BY v.committed DESC, v.version DESC LIMIT 1)`
+}
+
+// sqlSharedVersions reads, for some nodes (nil: every node of the namespace), the greatest version of the commits two
+// branches both hold (ADR 0177), with whether it deletes the node, why it was written and its branch.
+func (d dialect) sqlSharedVersions(namespace, branch, other string, ids []domain.NodeID) (string, []any) {
+	args := []any{domain.BranchOf(branch), domain.BranchOf(other), domain.NamespaceOf(namespace)}
+	if ids != nil {
+		list, arg, id := `unnest($4::uuid[]) AS q(id)`, any(nodeIDStrings(ids)), `q.id`
+		if !d.pg {
+			b, _ := json.Marshal(nodeIDStrings(ids))
+			list, arg, id = `json_each(?4) q`, string(b), `q.value`
+		}
+		return `WITH x AS ` + d.materialized() + `(
+			SELECT ` + id + ` AS id, ` + d.latestShared(id, d.ph(1), d.ph(2)) + ` AS version
+			FROM ` + list + ` WHERE (SELECT n.namespace FROM node n WHERE n.id = ` + id + `) = ` + d.ph(3) + `
+		)
+		SELECT ` + d.id("x.id") + `, x.version, w.deleted, w.reason, w.branch FROM x JOIN node_version w ON w.node_id = x.id AND w.version = x.version`, append(args, arg)
+	}
+	return `SELECT ` + d.id("node_id") + `, version, deleted, reason, branch FROM (
+		SELECT v.node_id, v.version, v.deleted, v.reason, v.branch, row_number() OVER (PARTITION BY v.node_id ORDER BY v.version DESC) AS rn
+		FROM branch_commit j JOIN branch_commit o ON o.branch = ` + d.ph(2) + ` AND o.seq = j.seq JOIN node_version v ON v.committed = j.seq JOIN node n ON n.id = v.node_id
+		WHERE j.branch = ` + d.ph(1) + ` AND n.namespace = ` + d.ph(3) + `
+	) y WHERE rn = 1`, args
 }
 
 // sqlCommitHeader reads the header of a commit.

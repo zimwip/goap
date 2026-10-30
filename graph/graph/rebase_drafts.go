@@ -80,8 +80,21 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 	// the head of the branch the change merges into, read for those nodes only (ADR 0137)
 	var target string
 	var head map[domain.NodeID]domain.Version
-	// a change that committed nothing yet starts from the head now: its fork (its reference commit) moves there
+	// a change that committed nothing yet starts from the head now: its branch takes the commits of its target up to
+	// there (ADR 0177); one with no branch of its own yet gets it, forked from its reference commit, which never moves
 	follow := !hasCommits(c)
+	if !isOwn && follow && c.ParentID == "" {
+		h, err := branchHeadHeader(ctx, tx, c.Namespace, domain.BranchOf(c.Branch))
+		if err != nil {
+			return "", nil, err
+		}
+		if h.ID != c.ForkCommit {
+			if c, own, err = g.ensureOwnBranch(ctx, tx, c); err != nil {
+				return "", nil, err
+			}
+			isOwn = true
+		}
+	}
 	if isOwn {
 		to, err := ontoOf(ctx, tx, own)
 		if err != nil {
@@ -95,7 +108,7 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 			if moved, err := to.moved(ctx, tx, own); err != nil {
 				return "", nil, err
 			} else if moved {
-				if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
+				if err := g.takeOnto(ctx, tx, c.ID, &own, &to); err != nil {
 					return "", nil, err
 				}
 				g.raiseRebased(ctx, tx, c.ID, own.Name, nil)
@@ -109,11 +122,6 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 		}
 		if head, err = versionsAt(ctx, tx, h.ID, ids); err != nil {
 			return "", nil, err
-		}
-		if follow && h.ID != c.ForkCommit {
-			if err := g.moveCommit(ctx, tx, c.ID, h.ID); err != nil {
-				return "", nil, err
-			}
 		}
 	}
 	var moved []draftRebase
@@ -286,23 +294,4 @@ func rebasedMoves(lc *domain.Lifecycle, events []domain.ImpactEvent, impact doma
 		return []stateMove{{theirs, ours}}, true
 	}
 	return nil, false
-}
-
-// moveCommit moves the reference commit of a change with no branch of its own yet (the one its branch will be forked
-// from), journaled as a rebase is (HeaderForkCommit).
-func (g *Graph) moveCommit(ctx context.Context, tx Tx, id domain.ChangeID, to domain.CommitID) error {
-	c, err := tx.Change(ctx, id)
-	if err != nil {
-		return err
-	}
-	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderForkCommit: {From: string(c.ForkCommit), To: string(to)}}})
-	if err != nil {
-		return err
-	}
-	if _, err := tx.AppendLog(ctx, e); err != nil {
-		return err
-	}
-	c.ForkCommit = to
-	return tx.PutChange(ctx, c)
 }

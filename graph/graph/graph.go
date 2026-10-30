@@ -556,6 +556,11 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err := tx.PutChange(ctx, c); err != nil {
 			return err
 		}
+		if in.OwnBranch && b.Ephemeral {
+			if err := g.catchUp(ctx, tx, c); err != nil {
+				return err
+			}
+		}
 		g.raise(ctx, tx, events.ChangeCreated, c, nil)
 		return nil
 	})

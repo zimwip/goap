@@ -76,8 +76,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatalf("apply with a conflict: %v", err)
 	}
 	bc, _ := g.Change(ctx, b.ID)
-	if bc.Status != domain.ChangeActive || bc.ForkCommit != ba.ID {
-		t.Fatalf("B = %s on %s, want active, rebased onto %s", bc.Status, bc.ForkCommit, ba.ID)
+	if moves := rebaseMoves(t, g, b.ID); bc.Status != domain.ChangeActive || bc.ForkCommit != b.ForkCommit || len(moves) != 1 || moves[0].To != string(ba.ID) {
+		t.Fatalf("B = %s on %s, want active on its fork, having taken %s (ADR 0177): %+v", bc.Status, bc.ForkCommit, ba.ID, moves)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
 		t.Fatalf("pending change leaked on main: %v", n.Properties)

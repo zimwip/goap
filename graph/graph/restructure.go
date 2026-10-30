@@ -412,7 +412,7 @@ func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, nid domain.NodeID
 		}
 		return w2.base(ctx, tx)
 	}
-	at, err := versionsAt(ctx, tx, w.c.ForkCommit, []domain.NodeID{nid}) // that node only, never the whole state
+	at, err := referenceVersions(ctx, tx, w.c, []domain.NodeID{nid}) // that node only, never the whole state
 	if err != nil {
 		return nil, err
 	}

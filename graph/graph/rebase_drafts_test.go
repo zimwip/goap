@@ -75,8 +75,8 @@ func testRebaseDraftsAtCommit(t *testing.T, repo Repo) {
 	}
 	got := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: one.ID}))
 	if got.State != "b" || got.Properties["note"] != "from A" || got.ChangeID != b1.ID || !slices.Equal(got.Parents, []domain.Version{heads[one.ID]}) ||
-		got.Reason != domain.ReasonDerive {
-		t.Fatalf("B1 keeps A1's edit, moves it to b and derives from A1's version: %+v", got)
+		got.Reason != domain.ReasonRevise {
+		t.Fatalf("B1 keeps A1's edit, moves it to b and revises A1's version, its branch took it (ADR 0177): %+v", got)
 	}
 	if got := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: two.ID})); got.State != "b" || !slices.Equal(got.Parents, []domain.Version{heads[two.ID]}) {
 		t.Fatalf("B2 moves IT-2 from c to b: %+v", got)

@@ -68,7 +68,7 @@ func diffCommits(ctx context.Context, tx Tx, from, to domain.CommitID) ([]Commit
 		}
 		if c.Branch != "" {
 			// what its branch holds: a node it reverted keeps no impact
-			on, err := tx.BranchNodeIDs(ctx, c.Branch)
+			on, err := tx.BranchNodeIDs(ctx, c.Branch, "")
 			if err != nil {
 				return nil, err
 			}

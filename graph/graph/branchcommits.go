@@ -19,7 +19,8 @@ import (
 // by the entry logSeq of the log of change (the versions are not rewritten). moved are the versions the merge moves
 // target to (the head kept in memory follows them, heads.go).
 func takeCommits(ctx context.Context, tx Tx, namespace, target, source string, change domain.ChangeID, logSeq int64, moved []domain.NodeRef) error {
-	seqs, err := tx.JoinedCommits(ctx, source, 0, math.MaxInt64)
+	// the commits the target holds already are left out: the ones the source took of it by a rebase (ADR 0177)
+	seqs, err := tx.JoinedCommits(ctx, namespace, source, target, 0, math.MaxInt64)
 	if err != nil {
 		return err
 	}
@@ -36,4 +37,21 @@ func takeCommits(ctx context.Context, tx Tx, namespace, target, source string, c
 		}
 	}
 	return nil
+}
+
+// takeRows makes the branch of a change take commits of the branch it is forked from by a rebase (ADR 0177): rows of
+// the commits, at a new order of the branch that no commit of its own takes up (the rebase writes no commit), recorded
+// by the entry logSeq of the log of change.
+func takeRows(ctx context.Context, tx Tx, branch string, change domain.ChangeID, logSeq int64, seqs []int64) error {
+	if len(seqs) == 0 {
+		return nil
+	}
+	if gt, ok := unwrapGuard(tx); ok {
+		return gt.takeRows(ctx, branch, change, logSeq, seqs)
+	}
+	at, err := tx.NextCommit(ctx)
+	if err != nil {
+		return err
+	}
+	return tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }

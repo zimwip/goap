@@ -117,7 +117,7 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 			t.Fatalf("event ids %v", sink.ids)
 		}
 
-		// a change whose target moved on other nodes is rebased (its fork moved), then merged
+		// a change whose target moved on other nodes takes its commits (ADR 0177), then is merged
 		a, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "a", Intent: "i", OwnBranch: true})
 		if err != nil {
 			t.Fatal(err)
@@ -138,10 +138,15 @@ func TestGraphEmitsTheEventsOfAChange(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		for _, ch := range []domain.Change{a, b} {
-			if _, err := g.CloseChange(ctx, ch.ID); err != nil {
-				t.Fatal(err)
-			}
+		if _, err := g.CloseChange(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		// merged and kept open, b takes the commits of its target (ADR 0177); closed then, nothing is left to merge
+		if _, err := g.IntegrateChange(ctx, b.ID, nil); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.CloseChange(ctx, b.ID); err != nil {
+			t.Fatal(err)
 		}
 		want = []string{events.ChangeCreated, events.ChangeCommitted, events.ChangeRebased, events.ChangeMerged, events.ChangeApplied}
 		if got := sink.types(b.ID); !slices.Equal(got, want) {

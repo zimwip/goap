@@ -50,7 +50,7 @@ func commitOfChange(t *testing.T, g *Graph, c domain.ChangeID, kind string) doma
 	return domain.Commit{}
 }
 
-// rebaseMoves are the commitId moves recorded in the log of a change.
+// rebaseMoves are the heads a change took by a rebase, recorded in its log (ADR 0177).
 func rebaseMoves(t *testing.T, g *Graph, id domain.ChangeID) []domain.HeaderValue {
 	t.Helper()
 	entries, _, err := g.ChangeLog(context.Background(), domain.LogFilter{Change: id})
@@ -66,7 +66,7 @@ func rebaseMoves(t *testing.T, g *Graph, id domain.ChangeID) []domain.HeaderValu
 		if err := json.Unmarshal(e.Payload, &h); err != nil {
 			t.Fatal(err)
 		}
-		if v, ok := h.Fields[HeaderForkCommit]; ok {
+		if v, ok := h.Fields[HeaderRebasedOnto]; ok {
 			out = append(out, v)
 		}
 	}
@@ -117,8 +117,8 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 		t.Fatalf("head = %s, want %s", head.ID, b2.ID)
 	}
 	moves := rebaseMoves(t, g, t2.ID)
-	if len(moves) != 1 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) {
-		t.Fatalf("test2's log must say it moved from B to T1: %+v", moves)
+	if len(moves) != 1 || moves[0].To != string(b1.ID) {
+		t.Fatalf("test2's log must say it took T1: %+v", moves)
 	}
 	if got := rebaseMoves(t, g, t1.ID); len(got) != 0 {
 		t.Fatalf("test1 was not behind: %+v", got)
@@ -130,10 +130,10 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 			t.Fatalf("a change adds one fast-forward to main, its other commits on its branch: %+v", b)
 		}
 	}
-	if br := must[domain.Branch](t)(g.Branch(ctx, "", t2.Branch)); br.RebasedFrom != f.base.ID || br.ForkCommit != b1.ID || br.Status != domain.BranchMerged {
+	if br := must[domain.Branch](t)(g.Branch(ctx, "", t2.Branch)); br.RebasedFrom != "" || br.ForkCommit != f.base.ID || br.Status != domain.BranchMerged {
 		t.Fatalf("test2's branch: %+v", br)
 	}
-	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.ForkCommit != b1.ID || ch.Status != domain.ChangeApplied || ch.LandedCommit != b2.ID {
+	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.ForkCommit != f.base.ID || ch.Status != domain.ChangeApplied || ch.LandedCommit != b2.ID {
 		t.Fatalf("test2: %+v", ch)
 	}
 }
@@ -347,10 +347,9 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 || n.Reason != domain.ReasonRebase {
 		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
 	}
-	// the rebase moved test2's fork from B to T1, then its merge to what it merged (the change open, ADR 0166)
-	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 2 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) ||
-		moves[1].From != string(b1.ID) || moves[1].To != string(res.ID) {
-		t.Fatalf("the moves of test2's fork: %+v", moves)
+	// the rebase took T1; the merge moves nothing (the change open, ADR 0166, 0177)
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 1 || moves[0].To != string(b1.ID) {
+		t.Fatalf("the heads test2 took: %+v", moves)
 	}
 }
 
@@ -393,7 +392,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	if res.Kind != domain.CommitKindMerge || res.ParentID != b1.ID {
 		t.Fatalf("the race commits by a merge: %+v", res)
 	}
-	if moves := rebaseMoves(t, g, t2.ID); len(moves) == 0 || moves[0].From != string(f.base.ID) {
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) == 0 {
 		t.Fatalf("test2 was rebased onto test0 before: %+v", moves)
 	}
 }
