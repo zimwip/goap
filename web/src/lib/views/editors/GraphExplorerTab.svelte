@@ -12,6 +12,7 @@
   import type { Tab } from '../../shell/types';
   import { graph as graphApi, errorMessage, type GraphNode } from '../../api';
   import { openNode } from '../../nodeEditors';
+  import { dragNode } from '../../nodeDrag';
   import { contextView, graphView, searchView, viewHoods, type ContextView } from '../../contextView';
   import { hoodIndex, hoodOf, type Hood } from '../../graphIndex';
   import { cellNodes, cellOf, nodeLabel, queryHood, querySummary, QUERY_EXAMPLES, valueText } from '../../graphQuery';
@@ -436,7 +437,7 @@
     </div>
     <aside class="side">
       {#if sel}
-        <h4><i style="background: {colour(sel.ns)}"></i>{sel.label}</h4>
+        <h4 draggable="true" ondragstart={(e) => dragNode(e, sel.node)} title="Drag to put the node in a folder of a project directory"><i style="background: {colour(sel.ns)}"></i>{sel.label}</h4>
         <p class="hint mono">{sel.node.key} · {sel.node.type}</p>
         {#if sel.node.state}<p class="hint">state {sel.node.state}</p>{/if}
         <div class="row">

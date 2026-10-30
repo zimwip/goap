@@ -40,6 +40,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { nodeEditor } from '../../shell/registry';
   import { handleOf, openNode, openTarget } from '../../nodeEditors';
+  import { dragNode } from '../../nodeDrag';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { provideActions, notify } from '../../shell/workbench.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
@@ -570,7 +571,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 <div class="editor-page">
   <div class="editor-head">
     <Icon name="node" size={18} />
-    <h2>{stored?.key || tab.params.key || shortId(id)}</h2>
+    <h2 draggable={!!stored} ondragstart={(e) => dragNode(e, stored)} title={stored ? 'Drag to put the node in a folder of a project directory' : undefined}>{stored?.key || tab.params.key || shortId(id)}</h2>
     {#if typeName}<span class="hint">{typeName}</span>{/if}
     {#if nodeState}<span class="state" class:notCommittable title={notCommittable ? 'Not committable: a change cannot commit with the node in this state' : ''}>{nodeState}</span>{/if}
     {#if inChange && isDraft(row?.impact?.post)}

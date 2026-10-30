@@ -1,8 +1,10 @@
-// Package smarttagsvc keeps the smart tags (ADR 0143 §7): shared selections of exact node versions, of any nodes and
+// Package smarttagsvc keeps the smart tags (ADR 0143 §7): shared selections of node versions, of any nodes and
 // namespaces, that give people a context (the versions a review, a release or an investigation is about). A smart tag
 // is data of its own, like the preferences (ADR 0038): never a state of the graph, no change, no journal; adding or
 // removing a version is an edit of the smart tag, not a change of the nodes. Its owner shares it with users by
-// subject, to read or to edit.
+// subject, to read or to edit. Smart tags form trees (ADR 0178): a tag may have a parent, the root carrying the access
+// of its tree; an entry may name a node without its version (followed in the reader's view); a tree may belong to a
+// project, whose members read and edit it: the directory of the project.
 package smarttagsvc
 
 import (
@@ -34,15 +36,21 @@ const (
 	AccessOwner = "owner"
 )
 
-// SmartTag is a named selection of exact node versions.
+// SmartTag is a named selection of node versions: an exact version, or version 0 for the node itself (ADR 0178).
 type SmartTag struct {
 	ID          string
 	Name        string
 	Description string
-	// Owner is the subject who created it: the one who shares and deletes it.
-	Owner    string
+	// Owner is the subject who created it: the owner of a root shares and deletes it.
+	Owner string
+	// Parent is the tag it is a sub-tag of ("": a root, whose owner and shares are the access of its tree).
+	Parent string
+	// Project is the project the tree belongs to ("": none): its members read and edit it.
+	Project  string
 	Versions []domain.NodeRef
 	Shares   []Share
+	// Access is the access of the caller it was read for (set by the Service, never stored).
+	Access string
 	// By is who last changed it.
 	By        string
 	CreatedAt time.Time
@@ -56,12 +64,13 @@ type Share struct {
 	Access string
 }
 
-// Selects reports whether the smart tag selects a version of node.
+// Selects reports whether the smart tag selects node: a version of it, or the node itself.
 func (t SmartTag) Selects(node domain.NodeID) bool {
 	return slices.ContainsFunc(t.Versions, func(r domain.NodeRef) bool { return r.ID == node })
 }
 
-// AccessOf is the access subject has to the smart tag, "" for none.
+// AccessOf is the access subject has to the smart tag by its owner and its shares, "" for none (for a sub-tag, the
+// access of its tree is its root's: Service).
 func (t SmartTag) AccessOf(subject string) string {
 	if subject == t.Owner {
 		return AccessOwner
@@ -77,13 +86,18 @@ func (t SmartTag) AccessOf(subject string) string {
 // ErrNotFound is returned for a smart tag that does not exist, or that the caller may not read.
 var ErrNotFound = errors.New("not found")
 
-// Store keeps the smart tags.
+// Store keeps the smart tags. The lists are by name.
 type Store interface {
 	// Get returns a smart tag (ErrNotFound when absent).
 	Get(ctx context.Context, id string) (SmartTag, error)
-	// List returns the smart tags subject owns or that are shared with them, selecting a version of node when node is
-	// set, by name.
-	List(ctx context.Context, subject string, node domain.NodeID) ([]SmartTag, error)
+	// List returns the smart tags subject owns or that are shared with them.
+	List(ctx context.Context, subject string) ([]SmartTag, error)
+	// Selecting returns the smart tags selecting node (a version of it, or the node itself), whoever reads them.
+	Selecting(ctx context.Context, node domain.NodeID) ([]SmartTag, error)
+	// Children returns the sub-tags of the tags listed.
+	Children(ctx context.Context, parents []string) ([]SmartTag, error)
+	// InProject returns the smart tags of a project, every tree.
+	InProject(ctx context.Context, project string) ([]SmartTag, error)
 	// Create stores a new smart tag.
 	Create(ctx context.Context, t SmartTag) error
 	// Update reads a smart tag, lets fn change it and stores the result, atomically (an error of fn writes nothing).
@@ -128,17 +142,33 @@ func (s *MemoryStore) Get(_ context.Context, id string) (SmartTag, error) {
 	return clone(t), nil
 }
 
-func (s *MemoryStore) List(_ context.Context, subject string, node domain.NodeID) ([]SmartTag, error) {
+func (s *MemoryStore) where(keep func(SmartTag) bool) []SmartTag {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []SmartTag
 	for _, t := range s.tags {
-		if t.AccessOf(subject) != "" && (node == "" || t.Selects(node)) {
+		if keep(t) {
 			out = append(out, clone(t))
 		}
 	}
 	sortTags(out)
-	return out, nil
+	return out
+}
+
+func (s *MemoryStore) List(_ context.Context, subject string) ([]SmartTag, error) {
+	return s.where(func(t SmartTag) bool { return t.AccessOf(subject) != "" }), nil
+}
+
+func (s *MemoryStore) Selecting(_ context.Context, node domain.NodeID) ([]SmartTag, error) {
+	return s.where(func(t SmartTag) bool { return t.Selects(node) }), nil
+}
+
+func (s *MemoryStore) Children(_ context.Context, parents []string) ([]SmartTag, error) {
+	return s.where(func(t SmartTag) bool { return t.Parent != "" && slices.Contains(parents, t.Parent) }), nil
+}
+
+func (s *MemoryStore) InProject(_ context.Context, project string) ([]SmartTag, error) {
+	return s.where(func(t SmartTag) bool { return project != "" && t.Project == project }), nil
 }
 
 func (s *MemoryStore) Create(_ context.Context, t SmartTag) error {
@@ -213,7 +243,7 @@ type querier interface {
 
 // read reads the smart tags whose ids are listed, with their versions and shares.
 func (s SQLStore) read(ctx context.Context, db querier, where string, args ...any) ([]SmartTag, error) {
-	rows, err := db.QueryContext(ctx, s.q(`SELECT id, name, description, owner, by, created_at, updated_at FROM smart_tag WHERE `+where), args...)
+	rows, err := db.QueryContext(ctx, s.q(`SELECT id, name, description, owner, parent, project, by, created_at, updated_at FROM smart_tag WHERE `+where), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +252,7 @@ func (s SQLStore) read(ctx context.Context, db querier, where string, args ...an
 	for rows.Next() {
 		var t SmartTag
 		var created, updated string
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.Owner, &t.By, &created, &updated); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.Owner, &t.Parent, &t.Project, &t.By, &created, &updated); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -286,18 +316,39 @@ func (s SQLStore) Get(ctx context.Context, id string) (SmartTag, error) {
 	return ts[0], nil
 }
 
-func (s SQLStore) List(ctx context.Context, subject string, node domain.NodeID) ([]SmartTag, error) {
-	where, args := `(owner = ? OR id IN (SELECT tag_id FROM smart_tag_share WHERE subject = ?))`, []any{subject, subject}
-	if node != "" {
-		where += ` AND id IN (SELECT tag_id FROM smart_tag_version WHERE node_id = ?)`
-		args = append(args, string(node))
-	}
+func (s SQLStore) list(ctx context.Context, where string, args ...any) ([]SmartTag, error) {
 	ts, err := s.read(ctx, s.DB, where+` ORDER BY name, id`, args...)
 	if err != nil {
 		return nil, err
 	}
 	sortTags(ts)
 	return ts, nil
+}
+
+func (s SQLStore) List(ctx context.Context, subject string) ([]SmartTag, error) {
+	return s.list(ctx, `(owner = ? OR id IN (SELECT tag_id FROM smart_tag_share WHERE subject = ?))`, subject, subject)
+}
+
+func (s SQLStore) Selecting(ctx context.Context, node domain.NodeID) ([]SmartTag, error) {
+	return s.list(ctx, `id IN (SELECT tag_id FROM smart_tag_version WHERE node_id = ?)`, string(node))
+}
+
+func (s SQLStore) Children(ctx context.Context, parents []string) ([]SmartTag, error) {
+	if len(parents) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(parents))
+	for i, p := range parents {
+		args[i] = p
+	}
+	return s.list(ctx, `parent <> '' AND parent IN (`+strings.TrimSuffix(strings.Repeat("?, ", len(parents)), ", ")+`)`, args...)
+}
+
+func (s SQLStore) InProject(ctx context.Context, project string) ([]SmartTag, error) {
+	if project == "" {
+		return nil, nil
+	}
+	return s.list(ctx, `project = ?`, project)
 }
 
 // write writes the selection and the shares of t, replacing those it had.
@@ -326,8 +377,8 @@ func (s SQLStore) Create(ctx context.Context, t SmartTag) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO smart_tag (id, name, description, owner, by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`),
-		t.ID, t.Name, t.Description, t.Owner, t.By, sqlTime(t.CreatedAt), sqlTime(t.UpdatedAt)); err != nil {
+	if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO smart_tag (id, name, description, owner, parent, project, by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		t.ID, t.Name, t.Description, t.Owner, t.Parent, t.Project, t.By, sqlTime(t.CreatedAt), sqlTime(t.UpdatedAt)); err != nil {
 		return err
 	}
 	if err := s.write(ctx, tx, t); err != nil {
@@ -357,8 +408,8 @@ func (s SQLStore) Update(ctx context.Context, id string, fn func(*SmartTag) erro
 	if err := fn(&t); err != nil {
 		return SmartTag{}, err
 	}
-	if _, err := tx.ExecContext(ctx, s.q(`UPDATE smart_tag SET name = ?, description = ?, by = ?, updated_at = ? WHERE id = ?`),
-		t.Name, t.Description, t.By, sqlTime(t.UpdatedAt), id); err != nil {
+	if _, err := tx.ExecContext(ctx, s.q(`UPDATE smart_tag SET name = ?, description = ?, parent = ?, by = ?, updated_at = ? WHERE id = ?`),
+		t.Name, t.Description, t.Parent, t.By, sqlTime(t.UpdatedAt), id); err != nil {
 		return SmartTag{}, err
 	}
 	if err := s.write(ctx, tx, t); err != nil {

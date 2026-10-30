@@ -4,6 +4,7 @@
   import type { GraphNode, Link, NodeRef } from '../api';
   import type { GraphIndex } from '../graphIndex';
   import { typeCatalog } from '../stores/types.svelte';
+  import { dragNode } from '../nodeDrag';
 
   let {
     node,
@@ -99,7 +100,9 @@
           <tr>
             <td title={l.type}>{typeCatalog.cat.linkLabel(l.type, 'out')}</td>
             <td>
-              <button type="button" class="link mono" onclick={() => onopen(l.to?.id ?? '')}>{keyOf(l.to)}</button>
+              <button type="button" class="link mono" draggable="true" title="Open; drag to put the node in a folder"
+                ondragstart={(e) => dragNode(e, { ...index?.nodes.get(l.to?.id ?? ''), id: l.to?.id, version: l.to?.version, key: keyOf(l.to) })}
+                onclick={() => onopen(l.to?.id ?? '')}>{keyOf(l.to)}</button>
               <span class="hint">v{l.to?.version}</span>
               {#if suspect(l)}<span class="suspect" title="The target has another version now: check the link still holds">suspect</span>{/if}
             </td>

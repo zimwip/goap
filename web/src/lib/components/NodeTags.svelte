@@ -4,6 +4,7 @@
   // editing a selection go through no change.
   import { graph, smartTags, errorMessage, formatDate, type SmartTag, type Tag } from '../api';
   import { notify } from '../shell/workbench.svelte';
+  import { project } from '../stores/project.svelte';
 
   let { id, versions }: { id: string; /** the versions of the node, oldest first */ versions: number[] } = $props();
 
@@ -18,6 +19,8 @@
   let addTo = $state('');
   let addVersion = $state(0);
   let newName = $state('');
+  /** add the node itself, followed in the reader's view, rather than the version chosen (ADR 0178) */
+  let addFollow = $state(false);
 
   const latest = $derived(versions.at(-1) ?? 0);
   $effect(() => {
@@ -28,10 +31,17 @@
   async function load(signal?: AbortSignal) {
     error = '';
     try {
-      const [t, s, all] = await Promise.all([graph.listTags({ nodeId: id }), smartTags.list(id, signal), smartTags.list('', signal)]);
+      // the smart tags the caller edits: theirs, the shared ones, and the folders of the active project (ADR 0178)
+      const [t, s, all, dir] = await Promise.all([
+        graph.listTags({ nodeId: id }),
+        smartTags.list(id, signal),
+        smartTags.list('', signal),
+        project.current ? smartTags.ofProject(project.current, signal).catch(() => ({ smartTags: [] })) : Promise.resolve({ smartTags: [] as SmartTag[] }),
+      ]);
       tags = t.tags ?? [];
       smart = s.smartTags ?? [];
-      mine = (all.smartTags ?? []).filter((x) => x.access === 'owner' || x.access === 'edit');
+      const editable = [...(all.smartTags ?? []), ...(dir.smartTags ?? [])].filter((x) => x.access === 'owner' || x.access === 'edit');
+      mine = editable.filter((x, i) => editable.findIndex((y) => y.id === x.id) === i);
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     }
@@ -64,8 +74,9 @@
   }
 
   function addToSmart() {
-    if (!addVersion) return;
-    const version = { nodeId: id, version: addVersion };
+    if (!addVersion && !addFollow) return;
+    const version = { nodeId: id, version: addFollow ? 0 : addVersion };
+    const what = addFollow ? 'the node' : `v${addVersion}`;
     if (addTo === 'new') {
       const name = newName.trim();
       if (!name) return;
@@ -77,7 +88,7 @@
     }
     const target = mine.find((x) => x.id === addTo);
     if (!target) return;
-    void act(() => smartTags.update(addTo, { add: [version] }), `v${addVersion} added to ${target.name}`);
+    void act(() => smartTags.update(addTo, { add: [version] }), `${what} added to ${target.name}`);
   }
 
   const selected = (t: SmartTag) => (t.versions ?? []).filter((v) => v.nodeId === id).map((v) => v.version ?? 0);
@@ -113,19 +124,20 @@
 
 <section class="card">
   <h3>Smart tags <span class="count">{smart.length}</span></h3>
-  <p class="hint">A smart tag selects exact versions of any nodes to give people a context; its owner shares it to read or to edit.</p>
+  <p class="hint">A smart tag selects nodes of any namespace, at an exact version or followed in the view, to give people a context; its owner shares it to read or to edit, a project's are its directory.</p>
   {#if smart.length}
     <ul class="rows">
       {#each smart as t (t.id)}
         <li>
           <span class="name">{t.name}</span>
           {#each selected(t) as v (v)}
-            <span class="ver">v{v}</span>
+            {@const label = v ? `v${v}` : 'follows'}
+            <span class="ver" title={v ? 'This exact version' : 'The node itself, read at the version the view holds'}>{label}</span>
             {#if t.access !== 'read'}
-              <button type="button" class="small" disabled={busy} title="Take this version out of the smart tag" onclick={() => act(() => smartTags.update(t.id ?? '', { remove: [{ nodeId: id, version: v }] }), `v${v} taken out of ${t.name}`)}>Remove v{v}</button>
+              <button type="button" class="small" disabled={busy} title="Take this entry out of the smart tag" onclick={() => act(() => smartTags.update(t.id ?? '', { remove: [{ nodeId: id, version: v }] }), `${label} taken out of ${t.name}`)}>Remove {label}</button>
             {/if}
           {/each}
-          <span class="hint">{t.access === 'owner' ? 'yours' : `${t.owner}'s, ${t.access}`} · {(t.versions ?? []).length} version{(t.versions ?? []).length === 1 ? '' : 's'}</span>
+          <span class="hint">{t.project ? `${t.project} · ` : ''}{t.access === 'owner' ? 'yours' : `${t.owner}'s, ${t.access}`} · {(t.versions ?? []).length} entr{(t.versions ?? []).length === 1 ? 'y' : 'ies'}</span>
         </li>
       {/each}
     </ul>
@@ -133,13 +145,14 @@
   {#if versions.length}
     <form class="row" onsubmit={(e) => (e.preventDefault(), addToSmart())}>
       <label for="smart-version">Add</label>
-      <select id="smart-version" bind:value={addVersion}>
+      <select id="smart-version" bind:value={addVersion} disabled={addFollow}>
         {#each [...versions].reverse() as v (v)}<option value={v}>v{v}</option>{/each}
       </select>
+      <label class="inline" title="The node itself, read at the version the view holds, rather than one version"><input type="checkbox" bind:checked={addFollow} /> follow the node</label>
       <label for="smart-target">to</label>
       <select id="smart-target" bind:value={addTo}>
         <option value="" disabled>a smart tag…</option>
-        {#each mine as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+        {#each mine as t (t.id)}<option value={t.id}>{t.project ? `${t.project} / ` : ''}{t.name}</option>{/each}
         <option value="new">New smart tag…</option>
       </select>
       {#if addTo === 'new'}<input aria-label="Smart tag name" placeholder="Name" bind:value={newName} />{/if}

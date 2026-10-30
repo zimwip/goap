@@ -8,9 +8,10 @@ import "google/protobuf/timestamp.proto";
 // namespaces, that give people a context (the versions a review, a release or an investigation is about). A smart tag
 // is data of its own, never a state of the graph: changing its selection is an edit of the smart tag, with no change to
 // go through and no journal. Its owner shares it with users by subject, to read or to edit; only the owner shares and
-// deletes it.
+// deletes it. Smart tags form trees (ADR 0178): a tag may have a parent, the root of a tree carrying the access of the
+// whole tree; a tree may belong to a project, whose members read and edit it: the directory of the project.
 service SmartTagService {
-  // The smart tags the caller owns or that are shared with them.
+  // The smart tags the caller reads: owned, shared or below one of those; with project, the tags of the project.
   rpc ListSmartTags(ListSmartTagsRequest) returns (ListSmartTagsResponse);
   rpc GetSmartTag(GetSmartTagRequest) returns (GetSmartTagResponse);
   rpc CreateSmartTag(CreateSmartTagRequest) returns (CreateSmartTagResponse);
@@ -21,7 +22,8 @@ service SmartTagService {
   rpc DeleteSmartTag(DeleteSmartTagRequest) returns (DeleteSmartTagResponse);
 }
 
-// one exact node version
+// an entry of a smart tag: one exact node version, or with version 0 the node itself, read at the version the
+// reader's view holds (ADR 0178)
 message TaggedVersion {
   string node_id = 1;
   int32 version = 2;
@@ -48,11 +50,17 @@ message SmartTag {
   string by = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  // the tag it is a sub-tag of ("": a root, carrying the access of its tree)
+  string parent = 11;
+  // the project the tree belongs to ("": none), whose members read and edit it
+  string project = 12;
 }
 
 message ListSmartTagsRequest {
-  // keep only the smart tags selecting a version of this node
+  // keep only the smart tags selecting this node (a version of it, or the node itself)
   string node_id = 1;
+  // the tags of this project (its directory), all of its trees
+  string project = 2;
 }
 
 message ListSmartTagsResponse {
@@ -71,6 +79,10 @@ message CreateSmartTagRequest {
   string name = 1;
   string description = 2;
   repeated TaggedVersion versions = 3;
+  // the tag it is created under ("": a root)
+  string parent = 4;
+  // the project of a root ("": none); a sub-tag takes its parent's
+  string project = 5;
 }
 
 message CreateSmartTagResponse {
@@ -86,6 +98,9 @@ message UpdateSmartTagRequest {
   bool set_description = 4;
   repeated TaggedVersion add = 5;
   repeated TaggedVersion remove = 6;
+  // moves the tag under another of the same project ("": a root of its own), when set_parent
+  string parent = 7;
+  bool set_parent = 8;
 }
 
 message UpdateSmartTagResponse {

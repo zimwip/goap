@@ -3,6 +3,7 @@
   // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
   // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
   // users hold which of those roles here.
+  import { untrack } from 'svelte';
   import EditorActions from '../../shell/EditorActions.svelte';
   import { types as nodeTypes, links as linkTypes, ns, isUserKey, can } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
@@ -11,6 +12,7 @@
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import AssignmentsPane from '../../components/AssignmentsPane.svelte';
   import ProjectSources from '../../components/ProjectSources.svelte';
+  import ProjectDirectory from '../../components/ProjectDirectory.svelte';
   import { errorMessage } from '../../api';
   import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
@@ -26,7 +28,11 @@
   let head = $state<HeadGraph>();
   let loading = $state(false);
   let error = $state('');
-  let pane = $state(tab.params.pane === 'assignments' || tab.params.pane === 'sources' ? tab.params.pane : 'overview');
+  // the pane is remembered in the tab: it comes back on it when the tab is shown again (a node dragged over the tab)
+  let pane = $state(untrack(() => tab.params.pane) || 'overview');
+  $effect(() => {
+    tab.params.pane = pane;
+  });
 
   const project = $derived(head ? findNode(head, ns.organisation, nodeTypes.projectUnit, key) : undefined);
   const nodeById = $derived(new Map((head?.nodes ?? []).map((n) => [n.id ?? '', n])));
@@ -87,6 +93,7 @@
 
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview' },
+    { id: 'directory', label: 'Directory' },
     { id: 'assignments', label: 'Assignments' },
     { id: 'sources', label: 'Sources' },
   ]);
@@ -241,6 +248,8 @@
               {/if}
             </section>
           {/if}
+        {:else if active === 'directory'}
+          <ProjectDirectory project={key} />
         {:else if active === 'sources' && head}
           <ProjectSources {head} {project} onChanged={load} />
         {:else if head}

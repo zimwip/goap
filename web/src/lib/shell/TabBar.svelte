@@ -4,8 +4,21 @@
   import Presence from '../components/Presence.svelte';
   import { editorView } from './registry';
   import { tabsState, activate, closeTab, togglePin, pinTab, moveTab, isDirty } from './tabs.svelte';
+  import { carriesNode } from '../nodeDrag';
 
   let dragFrom = -1;
+  // a node dragged over a tab shows that tab after a moment, to be dropped there (a folder of a project directory)
+  let hover: { id: string; timer: ReturnType<typeof setTimeout> } | undefined;
+  function hoverTab(e: DragEvent, id: string) {
+    if (dragFrom >= 0 || !carriesNode(e) || id === tabsState.active || hover?.id === id) return;
+    if (hover) clearTimeout(hover.timer);
+    hover = { id, timer: setTimeout(() => activate(id), 450) };
+  }
+  function leaveTab(id: string) {
+    if (hover?.id !== id) return;
+    clearTimeout(hover.timer);
+    hover = undefined;
+  }
   let list: HTMLDivElement;
   let overflow = $state(false);
   let canLeft = $state(false);
@@ -116,10 +129,15 @@
         dragFrom = i;
         e.dataTransfer?.setData('text/plain', tab.id);
       }}
-      ondragover={(e) => e.preventDefault()}
+      ondragover={(e) => {
+        e.preventDefault();
+        hoverTab(e, tab.id);
+      }}
+      ondragleave={() => leaveTab(tab.id)}
       ondrop={(e) => {
         e.preventDefault();
-        moveTab(dragFrom, i);
+        leaveTab(tab.id);
+        if (dragFrom >= 0) moveTab(dragFrom, i);
         dragFrom = -1;
       }}
     >

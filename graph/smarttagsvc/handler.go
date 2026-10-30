@@ -51,8 +51,12 @@ func refsFromPB(vs []*smarttagv1.TaggedVersion) []domain.NodeRef {
 
 // toPB is t as subject sees it.
 func toPB(t SmartTag, subject string) *smarttagv1.SmartTag {
-	out := &smarttagv1.SmartTag{Id: t.ID, Name: t.Name, Description: t.Description, Owner: t.Owner, Access: t.AccessOf(subject),
-		By: t.By, CreatedAt: pbconv.Time(t.CreatedAt), UpdatedAt: pbconv.Time(t.UpdatedAt)}
+	access := t.Access
+	if access == "" {
+		access = t.AccessOf(subject)
+	}
+	out := &smarttagv1.SmartTag{Id: t.ID, Name: t.Name, Description: t.Description, Owner: t.Owner, Access: access,
+		Parent: t.Parent, Project: t.Project, By: t.By, CreatedAt: pbconv.Time(t.CreatedAt), UpdatedAt: pbconv.Time(t.UpdatedAt)}
 	for _, r := range t.Versions {
 		out.Versions = append(out.Versions, &smarttagv1.TaggedVersion{NodeId: string(r.ID), Version: int32(r.Version)})
 	}
@@ -71,7 +75,7 @@ func (h *Handler) one(ctx context.Context, t SmartTag, err error) (*smarttagv1.S
 
 func (h *Handler) ListSmartTags(ctx context.Context, r *connect.Request[smarttagv1.ListSmartTagsRequest]) (*connect.Response[smarttagv1.ListSmartTagsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	ts, err := h.Service.List(ctx, domain.NodeID(r.Msg.NodeId))
+	ts, err := h.Service.List(ctx, domain.NodeID(r.Msg.NodeId), r.Msg.Project)
 	if err != nil {
 		return nil, rpcErr(err)
 	}
@@ -94,7 +98,8 @@ func (h *Handler) GetSmartTag(ctx context.Context, r *connect.Request[smarttagv1
 
 func (h *Handler) CreateSmartTag(ctx context.Context, r *connect.Request[smarttagv1.CreateSmartTagRequest]) (*connect.Response[smarttagv1.CreateSmartTagResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	t, err := h.Service.Create(ctx, r.Msg.Name, r.Msg.Description, refsFromPB(r.Msg.Versions))
+	t, err := h.Service.Create(ctx, New{Name: r.Msg.Name, Description: r.Msg.Description, Versions: refsFromPB(r.Msg.Versions),
+		Parent: r.Msg.Parent, Project: r.Msg.Project})
 	pb, err := h.one(ctx, t, err)
 	if err != nil {
 		return nil, err
@@ -105,7 +110,7 @@ func (h *Handler) CreateSmartTag(ctx context.Context, r *connect.Request[smartta
 func (h *Handler) UpdateSmartTag(ctx context.Context, r *connect.Request[smarttagv1.UpdateSmartTagRequest]) (*connect.Response[smarttagv1.UpdateSmartTagResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	t, err := h.Service.Update(ctx, r.Msg.Id, Patch{Name: r.Msg.Name, Description: r.Msg.Description, SetDescription: r.Msg.SetDescription,
-		Add: refsFromPB(r.Msg.Add), Remove: refsFromPB(r.Msg.Remove)})
+		Add: refsFromPB(r.Msg.Add), Remove: refsFromPB(r.Msg.Remove), Parent: r.Msg.Parent, SetParent: r.Msg.SetParent})
 	pb, err := h.one(ctx, t, err)
 	if err != nil {
 		return nil, err

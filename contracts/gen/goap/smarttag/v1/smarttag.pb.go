@@ -22,7 +22,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// one exact node version
+// an entry of a smart tag: one exact node version, or with version 0 the node itself, read at the version the
+// reader's view holds (ADR 0178)
 type TaggedVersion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
@@ -141,9 +142,13 @@ type SmartTag struct {
 	// the caller's access: "owner", "edit" or "read"
 	Access string `protobuf:"bytes,7,opt,name=access,proto3" json:"access,omitempty"`
 	// who last changed it, and when
-	By            string                 `protobuf:"bytes,8,opt,name=by,proto3" json:"by,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	By        string                 `protobuf:"bytes,8,opt,name=by,proto3" json:"by,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// the tag it is a sub-tag of ("": a root, carrying the access of its tree)
+	Parent string `protobuf:"bytes,11,opt,name=parent,proto3" json:"parent,omitempty"`
+	// the project the tree belongs to ("": none), whose members read and edit it
+	Project       string `protobuf:"bytes,12,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -248,10 +253,26 @@ func (x *SmartTag) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SmartTag) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *SmartTag) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
 type ListSmartTagsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// keep only the smart tags selecting a version of this node
-	NodeId        string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// keep only the smart tags selecting this node (a version of it, or the node itself)
+	NodeId string `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// the tags of this project (its directory), all of its trees
+	Project       string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -289,6 +310,13 @@ func (*ListSmartTagsRequest) Descriptor() ([]byte, []int) {
 func (x *ListSmartTagsRequest) GetNodeId() string {
 	if x != nil {
 		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ListSmartTagsRequest) GetProject() string {
+	if x != nil {
+		return x.Project
 	}
 	return ""
 }
@@ -426,10 +454,14 @@ func (x *GetSmartTagResponse) GetSmartTag() *SmartTag {
 }
 
 type CreateSmartTagRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Versions      []*TaggedVersion       `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Versions    []*TaggedVersion       `protobuf:"bytes,3,rep,name=versions,proto3" json:"versions,omitempty"`
+	// the tag it is created under ("": a root)
+	Parent string `protobuf:"bytes,4,opt,name=parent,proto3" json:"parent,omitempty"`
+	// the project of a root ("": none); a sub-tag takes its parent's
+	Project       string `protobuf:"bytes,5,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -483,6 +515,20 @@ func (x *CreateSmartTagRequest) GetVersions() []*TaggedVersion {
 		return x.Versions
 	}
 	return nil
+}
+
+func (x *CreateSmartTagRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *CreateSmartTagRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
 }
 
 type CreateSmartTagResponse struct {
@@ -539,8 +585,11 @@ type UpdateSmartTagRequest struct {
 	SetDescription bool             `protobuf:"varint,4,opt,name=set_description,json=setDescription,proto3" json:"set_description,omitempty"`
 	Add            []*TaggedVersion `protobuf:"bytes,5,rep,name=add,proto3" json:"add,omitempty"`
 	Remove         []*TaggedVersion `protobuf:"bytes,6,rep,name=remove,proto3" json:"remove,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// moves the tag under another of the same project ("": a root of its own), when set_parent
+	Parent        string `protobuf:"bytes,7,opt,name=parent,proto3" json:"parent,omitempty"`
+	SetParent     bool   `protobuf:"varint,8,opt,name=set_parent,json=setParent,proto3" json:"set_parent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateSmartTagRequest) Reset() {
@@ -613,6 +662,20 @@ func (x *UpdateSmartTagRequest) GetRemove() []*TaggedVersion {
 		return x.Remove
 	}
 	return nil
+}
+
+func (x *UpdateSmartTagRequest) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *UpdateSmartTagRequest) GetSetParent() bool {
+	if x != nil {
+		return x.SetParent
+	}
+	return false
 }
 
 type UpdateSmartTagResponse struct {
@@ -854,7 +917,7 @@ const file_goap_smarttag_v1_smarttag_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\"9\n" +
 	"\x05Share\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x16\n" +
-	"\x06access\x18\x02 \x01(\tR\x06access\"\xf2\x02\n" +
+	"\x06access\x18\x02 \x01(\tR\x06access\"\xa4\x03\n" +
 	"\bSmartTag\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -868,29 +931,37 @@ const file_goap_smarttag_v1_smarttag_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"/\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x16\n" +
+	"\x06parent\x18\v \x01(\tR\x06parent\x12\x18\n" +
+	"\aproject\x18\f \x01(\tR\aproject\"I\n" +
 	"\x14ListSmartTagsRequest\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\"R\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\"R\n" +
 	"\x15ListSmartTagsResponse\x129\n" +
 	"\n" +
 	"smart_tags\x18\x01 \x03(\v2\x1a.goap.smarttag.v1.SmartTagR\tsmartTags\"$\n" +
 	"\x12GetSmartTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"N\n" +
 	"\x13GetSmartTagResponse\x127\n" +
-	"\tsmart_tag\x18\x01 \x01(\v2\x1a.goap.smarttag.v1.SmartTagR\bsmartTag\"\x8a\x01\n" +
+	"\tsmart_tag\x18\x01 \x01(\v2\x1a.goap.smarttag.v1.SmartTagR\bsmartTag\"\xbc\x01\n" +
 	"\x15CreateSmartTagRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
-	"\bversions\x18\x03 \x03(\v2\x1f.goap.smarttag.v1.TaggedVersionR\bversions\"Q\n" +
+	"\bversions\x18\x03 \x03(\v2\x1f.goap.smarttag.v1.TaggedVersionR\bversions\x12\x16\n" +
+	"\x06parent\x18\x04 \x01(\tR\x06parent\x12\x18\n" +
+	"\aproject\x18\x05 \x01(\tR\aproject\"Q\n" +
 	"\x16CreateSmartTagResponse\x127\n" +
-	"\tsmart_tag\x18\x01 \x01(\v2\x1a.goap.smarttag.v1.SmartTagR\bsmartTag\"\xf2\x01\n" +
+	"\tsmart_tag\x18\x01 \x01(\v2\x1a.goap.smarttag.v1.SmartTagR\bsmartTag\"\xa9\x02\n" +
 	"\x15UpdateSmartTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12'\n" +
 	"\x0fset_description\x18\x04 \x01(\bR\x0esetDescription\x121\n" +
 	"\x03add\x18\x05 \x03(\v2\x1f.goap.smarttag.v1.TaggedVersionR\x03add\x127\n" +
-	"\x06remove\x18\x06 \x03(\v2\x1f.goap.smarttag.v1.TaggedVersionR\x06remove\"Q\n" +
+	"\x06remove\x18\x06 \x03(\v2\x1f.goap.smarttag.v1.TaggedVersionR\x06remove\x12\x16\n" +
+	"\x06parent\x18\a \x01(\tR\x06parent\x12\x1d\n" +
+	"\n" +
+	"set_parent\x18\b \x01(\bR\tsetParent\"Q\n" +
 	"\x16UpdateSmartTagResponse\x127\n" +
 	"\tsmart_tag\x18\x01 \x01(\v2\x1a.goap.smarttag.v1.SmartTagR\bsmartTag\"X\n" +
 	"\x14ShareSmartTagRequest\x12\x0e\n" +

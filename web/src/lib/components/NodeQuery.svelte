@@ -5,6 +5,7 @@
   import { graph as graphApi, errorMessage, type GraphNode, type GraphView, type QueryResult } from '../api';
   import { cellOf, matchesFilter, nodeLabel, querySummary, NODE_QUERY_EXAMPLES, valueText } from '../graphQuery';
   import { openNode } from '../nodeEditors';
+  import { dragNode } from '../nodeDrag';
   import { cypherSuggestions } from '../cypherComplete';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import CodeEditor from './CodeEditor.svelte';
@@ -127,7 +128,7 @@
                 <td>
                   {#if c.kind === 'node' && c.node}
                     {@const n = c.node}
-                    <button type="button" class="link" onclick={() => onpick?.(n)} ondblclick={() => void openNode(n)} title="{n.key} · {n.type}">{nodeLabel(n, c.id)}</button>
+                    <button type="button" class="link" draggable="true" ondragstart={(e) => dragNode(e, n)} onclick={() => onpick?.(n)} ondblclick={() => void openNode(n)} title="{n.key} · {n.type}">{nodeLabel(n, c.id)}</button>
                   {:else}
                     <span class="mono">{valueText(v, result)}</span>
                   {/if}

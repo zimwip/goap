@@ -12,10 +12,11 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file goap/smarttag/v1/smarttag.proto.
  */
 export const file_goap_smarttag_v1_smarttag: GenFile = /*@__PURE__*/
-  fileDesc("Ch9nb2FwL3NtYXJ0dGFnL3YxL3NtYXJ0dGFnLnByb3RvEhBnb2FwLnNtYXJ0dGFnLnYxIjEKDVRhZ2dlZFZlcnNpb24SDwoHbm9kZV9pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIigKBVNoYXJlEg8KB3N1YmplY3QYASABKAkSDgoGYWNjZXNzGAIgASgJIqACCghTbWFydFRhZxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg0KBW93bmVyGAQgASgJEjEKCHZlcnNpb25zGAUgAygLMh8uZ29hcC5zbWFydHRhZy52MS5UYWdnZWRWZXJzaW9uEicKBnNoYXJlcxgGIAMoCzIXLmdvYXAuc21hcnR0YWcudjEuU2hhcmUSDgoGYWNjZXNzGAcgASgJEgoKAmJ5GAggASgJEi4KCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIicKFExpc3RTbWFydFRhZ3NSZXF1ZXN0Eg8KB25vZGVfaWQYASABKAkiRwoVTGlzdFNtYXJ0VGFnc1Jlc3BvbnNlEi4KCnNtYXJ0X3RhZ3MYASADKAsyGi5nb2FwLnNtYXJ0dGFnLnYxLlNtYXJ0VGFnIiAKEkdldFNtYXJ0VGFnUmVxdWVzdBIKCgJpZBgBIAEoCSJEChNHZXRTbWFydFRhZ1Jlc3BvbnNlEi0KCXNtYXJ0X3RhZxgBIAEoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWcibQoVQ3JlYXRlU21hcnRUYWdSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSMQoIdmVyc2lvbnMYAyADKAsyHy5nb2FwLnNtYXJ0dGFnLnYxLlRhZ2dlZFZlcnNpb24iRwoWQ3JlYXRlU21hcnRUYWdSZXNwb25zZRItCglzbWFydF90YWcYASABKAsyGi5nb2FwLnNtYXJ0dGFnLnYxLlNtYXJ0VGFnIr4BChVVcGRhdGVTbWFydFRhZ1JlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIXCg9zZXRfZGVzY3JpcHRpb24YBCABKAgSLAoDYWRkGAUgAygLMh8uZ29hcC5zbWFydHRhZy52MS5UYWdnZWRWZXJzaW9uEi8KBnJlbW92ZRgGIAMoCzIfLmdvYXAuc21hcnR0YWcudjEuVGFnZ2VkVmVyc2lvbiJHChZVcGRhdGVTbWFydFRhZ1Jlc3BvbnNlEi0KCXNtYXJ0X3RhZxgBIAEoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWciQwoUU2hhcmVTbWFydFRhZ1JlcXVlc3QSCgoCaWQYASABKAkSDwoHc3ViamVjdBgCIAEoCRIOCgZhY2Nlc3MYAyABKAkiRgoVU2hhcmVTbWFydFRhZ1Jlc3BvbnNlEi0KCXNtYXJ0X3RhZxgBIAEoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWciIwoVRGVsZXRlU21hcnRUYWdSZXF1ZXN0EgoKAmlkGAEgASgJIhgKFkRlbGV0ZVNtYXJ0VGFnUmVzcG9uc2Uy4AQKD1NtYXJ0VGFnU2VydmljZRJgCg1MaXN0U21hcnRUYWdzEiYuZ29hcC5zbWFydHRhZy52MS5MaXN0U21hcnRUYWdzUmVxdWVzdBonLmdvYXAuc21hcnR0YWcudjEuTGlzdFNtYXJ0VGFnc1Jlc3BvbnNlEloKC0dldFNtYXJ0VGFnEiQuZ29hcC5zbWFydHRhZy52MS5HZXRTbWFydFRhZ1JlcXVlc3QaJS5nb2FwLnNtYXJ0dGFnLnYxLkdldFNtYXJ0VGFnUmVzcG9uc2USYwoOQ3JlYXRlU21hcnRUYWcSJy5nb2FwLnNtYXJ0dGFnLnYxLkNyZWF0ZVNtYXJ0VGFnUmVxdWVzdBooLmdvYXAuc21hcnR0YWcudjEuQ3JlYXRlU21hcnRUYWdSZXNwb25zZRJjCg5VcGRhdGVTbWFydFRhZxInLmdvYXAuc21hcnR0YWcudjEuVXBkYXRlU21hcnRUYWdSZXF1ZXN0GiguZ29hcC5zbWFydHRhZy52MS5VcGRhdGVTbWFydFRhZ1Jlc3BvbnNlEmAKDVNoYXJlU21hcnRUYWcSJi5nb2FwLnNtYXJ0dGFnLnYxLlNoYXJlU21hcnRUYWdSZXF1ZXN0GicuZ29hcC5zbWFydHRhZy52MS5TaGFyZVNtYXJ0VGFnUmVzcG9uc2USYwoORGVsZXRlU21hcnRUYWcSJy5nb2FwLnNtYXJ0dGFnLnYxLkRlbGV0ZVNtYXJ0VGFnUmVxdWVzdBooLmdvYXAuc21hcnR0YWcudjEuRGVsZXRlU21hcnRUYWdSZXNwb25zZULJAQoUY29tLmdvYXAuc21hcnR0YWcudjFCDVNtYXJ0dGFnUHJvdG9QAVpAZ2l0aHViLmNvbS96aW13aXAvZ29hcC9jb250cmFjdHMvZ2VuL2dvYXAvc21hcnR0YWcvdjE7c21hcnR0YWd2MaICA0dTWKoCEEdvYXAuU21hcnR0YWcuVjHKAhBHb2FwXFNtYXJ0dGFnXFYx4gIcR29hcFxTbWFydHRhZ1xWMVxHUEJNZXRhZGF0YeoCEkdvYXA6OlNtYXJ0dGFnOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("Ch9nb2FwL3NtYXJ0dGFnL3YxL3NtYXJ0dGFnLnByb3RvEhBnb2FwLnNtYXJ0dGFnLnYxIjEKDVRhZ2dlZFZlcnNpb24SDwoHbm9kZV9pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFIigKBVNoYXJlEg8KB3N1YmplY3QYASABKAkSDgoGYWNjZXNzGAIgASgJIsECCghTbWFydFRhZxIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg0KBW93bmVyGAQgASgJEjEKCHZlcnNpb25zGAUgAygLMh8uZ29hcC5zbWFydHRhZy52MS5UYWdnZWRWZXJzaW9uEicKBnNoYXJlcxgGIAMoCzIXLmdvYXAuc21hcnR0YWcudjEuU2hhcmUSDgoGYWNjZXNzGAcgASgJEgoKAmJ5GAggASgJEi4KCmNyZWF0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBnBhcmVudBgLIAEoCRIPCgdwcm9qZWN0GAwgASgJIjgKFExpc3RTbWFydFRhZ3NSZXF1ZXN0Eg8KB25vZGVfaWQYASABKAkSDwoHcHJvamVjdBgCIAEoCSJHChVMaXN0U21hcnRUYWdzUmVzcG9uc2USLgoKc21hcnRfdGFncxgBIAMoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWciIAoSR2V0U21hcnRUYWdSZXF1ZXN0EgoKAmlkGAEgASgJIkQKE0dldFNtYXJ0VGFnUmVzcG9uc2USLQoJc21hcnRfdGFnGAEgASgLMhouZ29hcC5zbWFydHRhZy52MS5TbWFydFRhZyKOAQoVQ3JlYXRlU21hcnRUYWdSZXF1ZXN0EgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSMQoIdmVyc2lvbnMYAyADKAsyHy5nb2FwLnNtYXJ0dGFnLnYxLlRhZ2dlZFZlcnNpb24SDgoGcGFyZW50GAQgASgJEg8KB3Byb2plY3QYBSABKAkiRwoWQ3JlYXRlU21hcnRUYWdSZXNwb25zZRItCglzbWFydF90YWcYASABKAsyGi5nb2FwLnNtYXJ0dGFnLnYxLlNtYXJ0VGFnIuIBChVVcGRhdGVTbWFydFRhZ1JlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIXCg9zZXRfZGVzY3JpcHRpb24YBCABKAgSLAoDYWRkGAUgAygLMh8uZ29hcC5zbWFydHRhZy52MS5UYWdnZWRWZXJzaW9uEi8KBnJlbW92ZRgGIAMoCzIfLmdvYXAuc21hcnR0YWcudjEuVGFnZ2VkVmVyc2lvbhIOCgZwYXJlbnQYByABKAkSEgoKc2V0X3BhcmVudBgIIAEoCCJHChZVcGRhdGVTbWFydFRhZ1Jlc3BvbnNlEi0KCXNtYXJ0X3RhZxgBIAEoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWciQwoUU2hhcmVTbWFydFRhZ1JlcXVlc3QSCgoCaWQYASABKAkSDwoHc3ViamVjdBgCIAEoCRIOCgZhY2Nlc3MYAyABKAkiRgoVU2hhcmVTbWFydFRhZ1Jlc3BvbnNlEi0KCXNtYXJ0X3RhZxgBIAEoCzIaLmdvYXAuc21hcnR0YWcudjEuU21hcnRUYWciIwoVRGVsZXRlU21hcnRUYWdSZXF1ZXN0EgoKAmlkGAEgASgJIhgKFkRlbGV0ZVNtYXJ0VGFnUmVzcG9uc2Uy4AQKD1NtYXJ0VGFnU2VydmljZRJgCg1MaXN0U21hcnRUYWdzEiYuZ29hcC5zbWFydHRhZy52MS5MaXN0U21hcnRUYWdzUmVxdWVzdBonLmdvYXAuc21hcnR0YWcudjEuTGlzdFNtYXJ0VGFnc1Jlc3BvbnNlEloKC0dldFNtYXJ0VGFnEiQuZ29hcC5zbWFydHRhZy52MS5HZXRTbWFydFRhZ1JlcXVlc3QaJS5nb2FwLnNtYXJ0dGFnLnYxLkdldFNtYXJ0VGFnUmVzcG9uc2USYwoOQ3JlYXRlU21hcnRUYWcSJy5nb2FwLnNtYXJ0dGFnLnYxLkNyZWF0ZVNtYXJ0VGFnUmVxdWVzdBooLmdvYXAuc21hcnR0YWcudjEuQ3JlYXRlU21hcnRUYWdSZXNwb25zZRJjCg5VcGRhdGVTbWFydFRhZxInLmdvYXAuc21hcnR0YWcudjEuVXBkYXRlU21hcnRUYWdSZXF1ZXN0GiguZ29hcC5zbWFydHRhZy52MS5VcGRhdGVTbWFydFRhZ1Jlc3BvbnNlEmAKDVNoYXJlU21hcnRUYWcSJi5nb2FwLnNtYXJ0dGFnLnYxLlNoYXJlU21hcnRUYWdSZXF1ZXN0GicuZ29hcC5zbWFydHRhZy52MS5TaGFyZVNtYXJ0VGFnUmVzcG9uc2USYwoORGVsZXRlU21hcnRUYWcSJy5nb2FwLnNtYXJ0dGFnLnYxLkRlbGV0ZVNtYXJ0VGFnUmVxdWVzdBooLmdvYXAuc21hcnR0YWcudjEuRGVsZXRlU21hcnRUYWdSZXNwb25zZULJAQoUY29tLmdvYXAuc21hcnR0YWcudjFCDVNtYXJ0dGFnUHJvdG9QAVpAZ2l0aHViLmNvbS96aW13aXAvZ29hcC9jb250cmFjdHMvZ2VuL2dvYXAvc21hcnR0YWcvdjE7c21hcnR0YWd2MaICA0dTWKoCEEdvYXAuU21hcnR0YWcuVjHKAhBHb2FwXFNtYXJ0dGFnXFYx4gIcR29hcFxTbWFydHRhZ1xWMVxHUEJNZXRhZGF0YeoCEkdvYXA6OlNtYXJ0dGFnOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
- * one exact node version
+ * an entry of a smart tag: one exact node version, or with version 0 the node itself, read at the version the
+ * reader's view holds (ADR 0178)
  *
  * @generated from message goap.smarttag.v1.TaggedVersion
  */
@@ -32,7 +33,8 @@ export type TaggedVersion = Message<"goap.smarttag.v1.TaggedVersion"> & {
 };
 
 /**
- * one exact node version
+ * an entry of a smart tag: one exact node version, or with version 0 the node itself, read at the version the
+ * reader's view holds (ADR 0178)
  *
  * @generated from message goap.smarttag.v1.TaggedVersion
  */
@@ -157,6 +159,20 @@ export type SmartTag = Message<"goap.smarttag.v1.SmartTag"> & {
    * @generated from field: google.protobuf.Timestamp updated_at = 10;
    */
   updatedAt?: Timestamp | undefined;
+
+  /**
+   * the tag it is a sub-tag of ("": a root, carrying the access of its tree)
+   *
+   * @generated from field: string parent = 11;
+   */
+  parent: string;
+
+  /**
+   * the project the tree belongs to ("": none), whose members read and edit it
+   *
+   * @generated from field: string project = 12;
+   */
+  project: string;
 };
 
 /**
@@ -220,6 +236,20 @@ export type SmartTagJson = {
    * @generated from field: google.protobuf.Timestamp updated_at = 10;
    */
   updatedAt?: TimestampJson;
+
+  /**
+   * the tag it is a sub-tag of ("": a root, carrying the access of its tree)
+   *
+   * @generated from field: string parent = 11;
+   */
+  parent?: string;
+
+  /**
+   * the project the tree belongs to ("": none), whose members read and edit it
+   *
+   * @generated from field: string project = 12;
+   */
+  project?: string;
 };
 
 /**
@@ -234,11 +264,18 @@ export const SmartTagSchema: GenMessage<SmartTag, {jsonType: SmartTagJson}> = /*
  */
 export type ListSmartTagsRequest = Message<"goap.smarttag.v1.ListSmartTagsRequest"> & {
   /**
-   * keep only the smart tags selecting a version of this node
+   * keep only the smart tags selecting this node (a version of it, or the node itself)
    *
    * @generated from field: string node_id = 1;
    */
   nodeId: string;
+
+  /**
+   * the tags of this project (its directory), all of its trees
+   *
+   * @generated from field: string project = 2;
+   */
+  project: string;
 };
 
 /**
@@ -246,11 +283,18 @@ export type ListSmartTagsRequest = Message<"goap.smarttag.v1.ListSmartTagsReques
  */
 export type ListSmartTagsRequestJson = {
   /**
-   * keep only the smart tags selecting a version of this node
+   * keep only the smart tags selecting this node (a version of it, or the node itself)
    *
    * @generated from field: string node_id = 1;
    */
   nodeId?: string;
+
+  /**
+   * the tags of this project (its directory), all of its trees
+   *
+   * @generated from field: string project = 2;
+   */
+  project?: string;
 };
 
 /**
@@ -359,6 +403,20 @@ export type CreateSmartTagRequest = Message<"goap.smarttag.v1.CreateSmartTagRequ
    * @generated from field: repeated goap.smarttag.v1.TaggedVersion versions = 3;
    */
   versions: TaggedVersion[];
+
+  /**
+   * the tag it is created under ("": a root)
+   *
+   * @generated from field: string parent = 4;
+   */
+  parent: string;
+
+  /**
+   * the project of a root ("": none); a sub-tag takes its parent's
+   *
+   * @generated from field: string project = 5;
+   */
+  project: string;
 };
 
 /**
@@ -379,6 +437,20 @@ export type CreateSmartTagRequestJson = {
    * @generated from field: repeated goap.smarttag.v1.TaggedVersion versions = 3;
    */
   versions?: TaggedVersionJson[];
+
+  /**
+   * the tag it is created under ("": a root)
+   *
+   * @generated from field: string parent = 4;
+   */
+  parent?: string;
+
+  /**
+   * the project of a root ("": none); a sub-tag takes its parent's
+   *
+   * @generated from field: string project = 5;
+   */
+  project?: string;
 };
 
 /**
@@ -452,6 +524,18 @@ export type UpdateSmartTagRequest = Message<"goap.smarttag.v1.UpdateSmartTagRequ
    * @generated from field: repeated goap.smarttag.v1.TaggedVersion remove = 6;
    */
   remove: TaggedVersion[];
+
+  /**
+   * moves the tag under another of the same project ("": a root of its own), when set_parent
+   *
+   * @generated from field: string parent = 7;
+   */
+  parent: string;
+
+  /**
+   * @generated from field: bool set_parent = 8;
+   */
+  setParent: boolean;
 };
 
 /**
@@ -491,6 +575,18 @@ export type UpdateSmartTagRequestJson = {
    * @generated from field: repeated goap.smarttag.v1.TaggedVersion remove = 6;
    */
   remove?: TaggedVersionJson[];
+
+  /**
+   * moves the tag under another of the same project ("": a root of its own), when set_parent
+   *
+   * @generated from field: string parent = 7;
+   */
+  parent?: string;
+
+  /**
+   * @generated from field: bool set_parent = 8;
+   */
+  setParent?: boolean;
 };
 
 /**
@@ -656,13 +752,14 @@ export const DeleteSmartTagResponseSchema: GenMessage<DeleteSmartTagResponse, {j
  * namespaces, that give people a context (the versions a review, a release or an investigation is about). A smart tag
  * is data of its own, never a state of the graph: changing its selection is an edit of the smart tag, with no change to
  * go through and no journal. Its owner shares it with users by subject, to read or to edit; only the owner shares and
- * deletes it.
+ * deletes it. Smart tags form trees (ADR 0178): a tag may have a parent, the root of a tree carrying the access of the
+ * whole tree; a tree may belong to a project, whose members read and edit it: the directory of the project.
  *
  * @generated from service goap.smarttag.v1.SmartTagService
  */
 export const SmartTagService: GenService<{
   /**
-   * The smart tags the caller owns or that are shared with them.
+   * The smart tags the caller reads: owned, shared or below one of those; with project, the tags of the project.
    *
    * @generated from rpc goap.smarttag.v1.SmartTagService.ListSmartTags
    */

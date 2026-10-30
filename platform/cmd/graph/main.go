@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/contracts/assess"
+	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
@@ -370,7 +371,11 @@ func main() {
 	graphService = &graphsvc.Router{Local: graphService, Sources: g.Sources, LocalSource: graphsvc.PlatformSource, Client: platform.H2CClient(), HasChange: g.HasChange}
 	// the requests that only read (Get…, List…: platform.ReadOnlyRequests) take the readers of the store
 	srv.Mount(path, platform.ReadOnlyRequests(graphService))
-	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node)}
+	smartTags := &smarttagsvc.Service{Store: smartTagStore, Exists: smarttagsvc.VersionsExist(g.Node),
+		// the members of a project read and edit its smart tags, its directory (ADR 0178)
+		MayAccessProject: func(ctx context.Context, project string) (bool, error) {
+			return directory.MayAccessProject(ctx, authz.From(ctx), project)
+		}}
 	srv.Mount(smarttagv1connect.NewSmartTagServiceHandler(&smarttagsvc.Handler{Service: smartTags}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	// the import registry (ADR 0148): a run is a job of the job service, an importer available when a worker claims it
 	imports := &importsvc.Service{Domains: client, Authz: authorizer, Jobs: jobs}

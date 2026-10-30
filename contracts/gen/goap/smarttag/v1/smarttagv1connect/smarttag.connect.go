@@ -55,7 +55,7 @@ const (
 
 // SmartTagServiceClient is a client for the goap.smarttag.v1.SmartTagService service.
 type SmartTagServiceClient interface {
-	// The smart tags the caller owns or that are shared with them.
+	// The smart tags the caller reads: owned, shared or below one of those; with project, the tags of the project.
 	ListSmartTags(context.Context, *connect.Request[v1.ListSmartTagsRequest]) (*connect.Response[v1.ListSmartTagsResponse], error)
 	GetSmartTag(context.Context, *connect.Request[v1.GetSmartTagRequest]) (*connect.Response[v1.GetSmartTagResponse], error)
 	CreateSmartTag(context.Context, *connect.Request[v1.CreateSmartTagRequest]) (*connect.Response[v1.CreateSmartTagResponse], error)
@@ -158,7 +158,7 @@ func (c *smartTagServiceClient) DeleteSmartTag(ctx context.Context, req *connect
 
 // SmartTagServiceHandler is an implementation of the goap.smarttag.v1.SmartTagService service.
 type SmartTagServiceHandler interface {
-	// The smart tags the caller owns or that are shared with them.
+	// The smart tags the caller reads: owned, shared or below one of those; with project, the tags of the project.
 	ListSmartTags(context.Context, *connect.Request[v1.ListSmartTagsRequest]) (*connect.Response[v1.ListSmartTagsResponse], error)
 	GetSmartTag(context.Context, *connect.Request[v1.GetSmartTagRequest]) (*connect.Response[v1.GetSmartTagResponse], error)
 	CreateSmartTag(context.Context, *connect.Request[v1.CreateSmartTagRequest]) (*connect.Response[v1.CreateSmartTagResponse], error)
