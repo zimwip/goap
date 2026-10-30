@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { elapsed, fraction, graphImportResult, isActive, isFinal, jobChange, jobFacts, kindLabel, newer, paramLines, statsLine } from './jobView';
+import { elapsed, fraction, graphImportResult, isActive, isFinal, jobChange, jobFacts, kindLabel, newer, paramLines, pendingRequest, statsLine } from './jobView';
 
 describe('jobs', () => {
   it('names the kinds', () => {
@@ -58,5 +58,17 @@ describe('job feedback', () => {
     expect(remaining({ ...j, status: 'done' }, start + 20_000)).toBe('');
     expect(remaining({ ...j, total: '0' }, start + 20_000)).toBe('');
     expect(logLines({ log: [{ at: '2026-10-20T10:00:01Z', text: 'commit 1/40 abc first' }] })[0].text).toBe('commit 1/40 abc first');
+  });
+});
+
+describe('job requests', () => {
+  const form = { title: 'Build artifacts', fields: [{ name: 'include', widget: 'multiselect', constraints: { options: ['dist'] } }] };
+  it('is pending while a running job has no answer', () => {
+    expect(pendingRequest({ id: 'j', status: 'running', request: { id: 'r1', form } })).toEqual({ id: 'r1', form });
+  });
+  it('is gone once answered, ended or never asked', () => {
+    expect(pendingRequest({ id: 'j', status: 'running', request: { id: 'r1', form, answeredAt: '2026-10-30T10:00:00Z' } })).toBeUndefined();
+    expect(pendingRequest({ id: 'j', status: 'cancelled', request: { id: 'r1', form } })).toBeUndefined();
+    expect(pendingRequest({ id: 'j', status: 'running' })).toBeUndefined();
   });
 });

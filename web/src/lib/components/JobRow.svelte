@@ -9,7 +9,7 @@
   import { openTab } from '../shell/tabs.svelte';
   import { notify } from '../shell/workbench.svelte';
   import { cancelJob, downloadJobResult, openJob } from '../stores/jobs.svelte';
-  import { elapsed, fraction, isActive, jobChange, jobTitle, kindLabel, remaining, size, statsLine } from '../jobView';
+  import { elapsed, fraction, isActive, jobChange, jobTitle, kindLabel, pendingRequest, remaining, size, statsLine } from '../jobView';
 
   let {
     job,
@@ -30,6 +30,7 @@
 
   const part = $derived(fraction(job));
   const active = $derived(isActive(job));
+  const asked = $derived(pendingRequest(job));
   const change = $derived(jobChange(job));
   const stats = $derived(statsLine(job));
   const left = $derived(remaining(job, now));
@@ -79,6 +80,7 @@
   {#if stats && !compact}<span class="hint line">{stats}</span>{/if}
   {#if job.error}<span class="alert small line">{job.error}</span>{/if}
   {#if job.cancelRequested && active}<span class="hint line">Stopping…</span>{/if}
+  {#if asked}<span class="asked line">Waiting for an answer: {asked.form.title || 'a question'}</span>{/if}
   </button>
   <div class="foot">
     <span class="hint">
@@ -192,5 +194,10 @@
     to {
       left: 100%;
     }
+  }
+  .asked {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.82rem;
   }
 </style>

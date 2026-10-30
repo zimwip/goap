@@ -15,6 +15,9 @@ export const jobService = {
     rpc<object, { jobs?: Job[] }>(JOBS, 'ListJobs', req, signal),
   /** Cancels a job: at once when queued, at the next report of its worker when running. */
   cancel: (id: string) => rpc<{ id: string }, { job?: Job }>(JOBS, 'CancelJob', { id }),
+  /** Answers the request a running job asked the caller: the values of its form. */
+  answer: (id: string, requestId: string, values: Record<string, unknown>) =>
+    rpc<{ id: string; requestId: string; values: Record<string, unknown> }, { job?: Job }>(JOBS, 'AnswerJob', { id, requestId, values }),
 };
 
 /** An event of the job stream (`GET /api/jobs/events`): `snapshot` first, with the caller's recent jobs, then `job`

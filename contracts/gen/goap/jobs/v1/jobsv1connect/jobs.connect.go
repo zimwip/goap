@@ -39,6 +39,8 @@ const (
 	JobServiceListJobsProcedure = "/goap.jobs.v1.JobService/ListJobs"
 	// JobServiceCancelJobProcedure is the fully-qualified name of the JobService's CancelJob RPC.
 	JobServiceCancelJobProcedure = "/goap.jobs.v1.JobService/CancelJob"
+	// JobServiceAnswerJobProcedure is the fully-qualified name of the JobService's AnswerJob RPC.
+	JobServiceAnswerJobProcedure = "/goap.jobs.v1.JobService/AnswerJob"
 	// JobServiceCreateJobProcedure is the fully-qualified name of the JobService's CreateJob RPC.
 	JobServiceCreateJobProcedure = "/goap.jobs.v1.JobService/CreateJob"
 	// JobServiceListWorkersProcedure is the fully-qualified name of the JobService's ListWorkers RPC.
@@ -52,6 +54,11 @@ const (
 	// JobServiceWriteJobResultProcedure is the fully-qualified name of the JobService's WriteJobResult
 	// RPC.
 	JobServiceWriteJobResultProcedure = "/goap.jobs.v1.JobService/WriteJobResult"
+	// JobServiceAskJobProcedure is the fully-qualified name of the JobService's AskJob RPC.
+	JobServiceAskJobProcedure = "/goap.jobs.v1.JobService/AskJob"
+	// JobServiceAwaitJobAnswerProcedure is the fully-qualified name of the JobService's AwaitJobAnswer
+	// RPC.
+	JobServiceAwaitJobAnswerProcedure = "/goap.jobs.v1.JobService/AwaitJobAnswer"
 )
 
 // JobServiceClient is a client for the goap.jobs.v1.JobService service.
@@ -62,6 +69,8 @@ type JobServiceClient interface {
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	// CancelJob cancels a job: a queued one at once, a running one when its worker next reports.
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// AnswerJob answers the request a running job asked the caller (the person it runs for): the values of its form.
+	AnswerJob(context.Context, *connect.Request[v1.AnswerJobRequest]) (*connect.Response[v1.AnswerJobResponse], error)
 	// CreateJob queues a job for a person; the calling service has authorized it.
 	CreateJob(context.Context, *connect.Request[v1.CreateJobRequest]) (*connect.Response[v1.CreateJobResponse], error)
 	// ListWorkers lists the live workers and the kinds they claim.
@@ -74,6 +83,10 @@ type JobServiceClient interface {
 	ReadJobInput(context.Context, *connect.Request[v1.ReadJobInputRequest]) (*connect.Response[v1.ReadJobInputResponse], error)
 	// WriteJobResult appends a chunk of the result of a job (the file of an export).
 	WriteJobResult(context.Context, *connect.Request[v1.WriteJobResultRequest]) (*connect.Response[v1.WriteJobResultResponse], error)
+	// AskJob asks the person a running job runs for a question, a form to fill in; the job waits for the answer.
+	AskJob(context.Context, *connect.Request[v1.AskJobRequest]) (*connect.Response[v1.AskJobResponse], error)
+	// AwaitJobAnswer waits up to `wait_ms` for the answer to the request of a running job.
+	AwaitJobAnswer(context.Context, *connect.Request[v1.AwaitJobAnswerRequest]) (*connect.Response[v1.AwaitJobAnswerResponse], error)
 }
 
 // NewJobServiceClient constructs a client for the goap.jobs.v1.JobService service. By default, it
@@ -103,6 +116,12 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+JobServiceCancelJobProcedure,
 			connect.WithSchema(jobServiceMethods.ByName("CancelJob")),
+			connect.WithClientOptions(opts...),
+		),
+		answerJob: connect.NewClient[v1.AnswerJobRequest, v1.AnswerJobResponse](
+			httpClient,
+			baseURL+JobServiceAnswerJobProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("AnswerJob")),
 			connect.WithClientOptions(opts...),
 		),
 		createJob: connect.NewClient[v1.CreateJobRequest, v1.CreateJobResponse](
@@ -141,6 +160,18 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(jobServiceMethods.ByName("WriteJobResult")),
 			connect.WithClientOptions(opts...),
 		),
+		askJob: connect.NewClient[v1.AskJobRequest, v1.AskJobResponse](
+			httpClient,
+			baseURL+JobServiceAskJobProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("AskJob")),
+			connect.WithClientOptions(opts...),
+		),
+		awaitJobAnswer: connect.NewClient[v1.AwaitJobAnswerRequest, v1.AwaitJobAnswerResponse](
+			httpClient,
+			baseURL+JobServiceAwaitJobAnswerProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("AwaitJobAnswer")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -149,12 +180,15 @@ type jobServiceClient struct {
 	getJob         *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
 	listJobs       *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
 	cancelJob      *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	answerJob      *connect.Client[v1.AnswerJobRequest, v1.AnswerJobResponse]
 	createJob      *connect.Client[v1.CreateJobRequest, v1.CreateJobResponse]
 	listWorkers    *connect.Client[v1.ListWorkersRequest, v1.ListWorkersResponse]
 	claimJob       *connect.Client[v1.ClaimJobRequest, v1.ClaimJobResponse]
 	reportJob      *connect.Client[v1.ReportJobRequest, v1.ReportJobResponse]
 	readJobInput   *connect.Client[v1.ReadJobInputRequest, v1.ReadJobInputResponse]
 	writeJobResult *connect.Client[v1.WriteJobResultRequest, v1.WriteJobResultResponse]
+	askJob         *connect.Client[v1.AskJobRequest, v1.AskJobResponse]
+	awaitJobAnswer *connect.Client[v1.AwaitJobAnswerRequest, v1.AwaitJobAnswerResponse]
 }
 
 // GetJob calls goap.jobs.v1.JobService.GetJob.
@@ -170,6 +204,11 @@ func (c *jobServiceClient) ListJobs(ctx context.Context, req *connect.Request[v1
 // CancelJob calls goap.jobs.v1.JobService.CancelJob.
 func (c *jobServiceClient) CancelJob(ctx context.Context, req *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return c.cancelJob.CallUnary(ctx, req)
+}
+
+// AnswerJob calls goap.jobs.v1.JobService.AnswerJob.
+func (c *jobServiceClient) AnswerJob(ctx context.Context, req *connect.Request[v1.AnswerJobRequest]) (*connect.Response[v1.AnswerJobResponse], error) {
+	return c.answerJob.CallUnary(ctx, req)
 }
 
 // CreateJob calls goap.jobs.v1.JobService.CreateJob.
@@ -202,6 +241,16 @@ func (c *jobServiceClient) WriteJobResult(ctx context.Context, req *connect.Requ
 	return c.writeJobResult.CallUnary(ctx, req)
 }
 
+// AskJob calls goap.jobs.v1.JobService.AskJob.
+func (c *jobServiceClient) AskJob(ctx context.Context, req *connect.Request[v1.AskJobRequest]) (*connect.Response[v1.AskJobResponse], error) {
+	return c.askJob.CallUnary(ctx, req)
+}
+
+// AwaitJobAnswer calls goap.jobs.v1.JobService.AwaitJobAnswer.
+func (c *jobServiceClient) AwaitJobAnswer(ctx context.Context, req *connect.Request[v1.AwaitJobAnswerRequest]) (*connect.Response[v1.AwaitJobAnswerResponse], error) {
+	return c.awaitJobAnswer.CallUnary(ctx, req)
+}
+
 // JobServiceHandler is an implementation of the goap.jobs.v1.JobService service.
 type JobServiceHandler interface {
 	// GetJob returns a job of the caller (any job for an administrator).
@@ -210,6 +259,8 @@ type JobServiceHandler interface {
 	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
 	// CancelJob cancels a job: a queued one at once, a running one when its worker next reports.
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
+	// AnswerJob answers the request a running job asked the caller (the person it runs for): the values of its form.
+	AnswerJob(context.Context, *connect.Request[v1.AnswerJobRequest]) (*connect.Response[v1.AnswerJobResponse], error)
 	// CreateJob queues a job for a person; the calling service has authorized it.
 	CreateJob(context.Context, *connect.Request[v1.CreateJobRequest]) (*connect.Response[v1.CreateJobResponse], error)
 	// ListWorkers lists the live workers and the kinds they claim.
@@ -222,6 +273,10 @@ type JobServiceHandler interface {
 	ReadJobInput(context.Context, *connect.Request[v1.ReadJobInputRequest]) (*connect.Response[v1.ReadJobInputResponse], error)
 	// WriteJobResult appends a chunk of the result of a job (the file of an export).
 	WriteJobResult(context.Context, *connect.Request[v1.WriteJobResultRequest]) (*connect.Response[v1.WriteJobResultResponse], error)
+	// AskJob asks the person a running job runs for a question, a form to fill in; the job waits for the answer.
+	AskJob(context.Context, *connect.Request[v1.AskJobRequest]) (*connect.Response[v1.AskJobResponse], error)
+	// AwaitJobAnswer waits up to `wait_ms` for the answer to the request of a running job.
+	AwaitJobAnswer(context.Context, *connect.Request[v1.AwaitJobAnswerRequest]) (*connect.Response[v1.AwaitJobAnswerResponse], error)
 }
 
 // NewJobServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -247,6 +302,12 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		JobServiceCancelJobProcedure,
 		svc.CancelJob,
 		connect.WithSchema(jobServiceMethods.ByName("CancelJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	jobServiceAnswerJobHandler := connect.NewUnaryHandler(
+		JobServiceAnswerJobProcedure,
+		svc.AnswerJob,
+		connect.WithSchema(jobServiceMethods.ByName("AnswerJob")),
 		connect.WithHandlerOptions(opts...),
 	)
 	jobServiceCreateJobHandler := connect.NewUnaryHandler(
@@ -285,6 +346,18 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(jobServiceMethods.ByName("WriteJobResult")),
 		connect.WithHandlerOptions(opts...),
 	)
+	jobServiceAskJobHandler := connect.NewUnaryHandler(
+		JobServiceAskJobProcedure,
+		svc.AskJob,
+		connect.WithSchema(jobServiceMethods.ByName("AskJob")),
+		connect.WithHandlerOptions(opts...),
+	)
+	jobServiceAwaitJobAnswerHandler := connect.NewUnaryHandler(
+		JobServiceAwaitJobAnswerProcedure,
+		svc.AwaitJobAnswer,
+		connect.WithSchema(jobServiceMethods.ByName("AwaitJobAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.jobs.v1.JobService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case JobServiceGetJobProcedure:
@@ -293,6 +366,8 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceListJobsHandler.ServeHTTP(w, r)
 		case JobServiceCancelJobProcedure:
 			jobServiceCancelJobHandler.ServeHTTP(w, r)
+		case JobServiceAnswerJobProcedure:
+			jobServiceAnswerJobHandler.ServeHTTP(w, r)
 		case JobServiceCreateJobProcedure:
 			jobServiceCreateJobHandler.ServeHTTP(w, r)
 		case JobServiceListWorkersProcedure:
@@ -305,6 +380,10 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceReadJobInputHandler.ServeHTTP(w, r)
 		case JobServiceWriteJobResultProcedure:
 			jobServiceWriteJobResultHandler.ServeHTTP(w, r)
+		case JobServiceAskJobProcedure:
+			jobServiceAskJobHandler.ServeHTTP(w, r)
+		case JobServiceAwaitJobAnswerProcedure:
+			jobServiceAwaitJobAnswerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -324,6 +403,10 @@ func (UnimplementedJobServiceHandler) ListJobs(context.Context, *connect.Request
 
 func (UnimplementedJobServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.jobs.v1.JobService.CancelJob is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) AnswerJob(context.Context, *connect.Request[v1.AnswerJobRequest]) (*connect.Response[v1.AnswerJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.jobs.v1.JobService.AnswerJob is not implemented"))
 }
 
 func (UnimplementedJobServiceHandler) CreateJob(context.Context, *connect.Request[v1.CreateJobRequest]) (*connect.Response[v1.CreateJobResponse], error) {
@@ -348,4 +431,12 @@ func (UnimplementedJobServiceHandler) ReadJobInput(context.Context, *connect.Req
 
 func (UnimplementedJobServiceHandler) WriteJobResult(context.Context, *connect.Request[v1.WriteJobResultRequest]) (*connect.Response[v1.WriteJobResultResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.jobs.v1.JobService.WriteJobResult is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) AskJob(context.Context, *connect.Request[v1.AskJobRequest]) (*connect.Response[v1.AskJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.jobs.v1.JobService.AskJob is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) AwaitJobAnswer(context.Context, *connect.Request[v1.AwaitJobAnswerRequest]) (*connect.Response[v1.AwaitJobAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.jobs.v1.JobService.AwaitJobAnswer is not implemented"))
 }

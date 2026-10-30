@@ -4,7 +4,7 @@
 import { SvelteMap } from 'svelte/reactivity';
 import { errorMessage, jobResult, jobService, onTokenChange, RpcError, streamJobs, type Job, type JobStreamEvent } from '../api';
 import { downloadBlob } from '../download';
-import { isActive, isFinal, newer } from '../jobView';
+import { isActive, isFinal, newer, pendingRequest } from '../jobView';
 import { onKind } from '../flux/events.svelte';
 
 /** The known jobs by id. */
@@ -12,6 +12,8 @@ export const knownJobs = new SvelteMap<string, Job>();
 
 export const jobStream = $state({ connected: false, error: '', loaded: false });
 
+/** The requests whose job detail was opened already. */
+const shownRequests = new Set<string>();
 const followers = new Map<string, ((j: Job) => void)[]>();
 const endListeners = new Set<(j: Job) => void>();
 
@@ -23,6 +25,13 @@ export function takeJob(j: Job): void {
   const prev = knownJobs.get(id);
   if (!newer(prev, j)) return;
   knownJobs.set(id, j);
+  // a job that starts waiting for the person opens its detail, where its form is (once per request, a later one only
+  // when no other detail is open)
+  const asked = pendingRequest(j);
+  if (asked && pendingRequest(prev)?.id !== asked.id && !shownRequests.has(asked.id)) {
+    shownRequests.add(asked.id);
+    if (!jobDetail.job || jobDetail.job.id === id) jobDetail.job = j;
+  }
   if (!isFinal(j) || (prev && isFinal(prev))) return;
   const fns = followers.get(id);
   followers.delete(id);
@@ -74,6 +83,12 @@ export const activeJobs = (): Job[] => jobList().filter(isActive);
 export async function downloadJobResult(j: Job): Promise<void> {
   const { blob, filename } = await jobResult(j);
   downloadBlob(blob, filename);
+}
+
+/** Answers the request a job waits on with the values of its form; the stream brings its new state. */
+export async function answerJob(j: Job, requestId: string, values: Record<string, unknown>): Promise<void> {
+  const { job } = await jobService.answer(j.id ?? '', requestId, values);
+  if (job) takeJob(job);
 }
 
 /** Cancels a job; the stream brings its new state. */

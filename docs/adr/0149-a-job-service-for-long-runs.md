@@ -75,3 +75,34 @@ review, a report) would have invented a fourth way.
 - One replica of the job service: the SSE stream follows the writes of its process. Several replicas would feed it from
   the bus (the outbox events) instead.
 - The imports and exports of definitions (a domain, a methodology) stay synchronous: they are one validated write.
+
+## Addendum: a job asks the person it runs for
+
+A long run sometimes needs a decision only the person can take, and only once it has looked at what it works on (the
+git import finds build artifacts in the tree it is about to import). A job **asks** and waits:
+
+- **The run defines the form.** `jobkit.Job.Ask(ctx, form.Form)` takes the form of a human action (`contracts/form`,
+  ADR 0115: fields, widgets, constraints, conditions), records it on the job as its request (`AskJob`, a service call
+  with the job token; `Job.request`: `id`, `form`, `asked_at`, then `answer`, `answered_at`; column `request` of
+  `job`) and waits for the answer (`AwaitJobAnswer`, long-polled like a claim, at most 30 s at a time). The job stays
+  `running`: its reporter renews its lease meanwhile and a cancel ends the wait (`Ask` returns the error of its
+  context). A job has one request at a time and keeps the last one, answered or not.
+- **The person answers.** `AnswerJob(id, request_id, values)`: only the person the job runs for, while it runs, once;
+  the values are checked and cleaned against the form (`form.Validate`, the nodes a field names not checked), else
+  `InvalidArgument`. Events `goap.job.<id>.asked` / `.answered` go through the outbox; the SSE stream carries the job
+  with its request.
+- **The web renders it.** A job waiting on its person opens its detail by itself (once per request), and
+  `JobDialog.svelte` shows the form through the same renderer as a human task (`forms/FormRenderer.svelte`);
+  `JobRow.svelte` says *Waiting for an answer*; `jobView.pendingRequest` tells a waiting job. A `select` or a
+  `multiselect` field may show labels for its values (constraint `labels`, one per option).
+- **First use: the build artifacts of a git import** (`platform/gitimport/artifacts.go`). Before its first commit a run
+  looks, by names only, in the tree of the revision it follows for what a build makes or a package manager installs
+  (`Detect`: `node_modules/`, `dist/`, `target/`, `obj/`, `__pycache__/`, the caches of the JavaScript frameworks; the
+  weak names `build/`, `out/`, `bin/`, `coverage/` only when they hold compiled output; minified bundles, source maps,
+  compiled objects and archives, generated sources), and asks which to import anyway (`Importer.Decide`; the plugin a
+  multiselect, none ticked). The rest is left out of every commit (`Importer.Exclude`, `Excluded`: a pattern without a
+  `/` names an element of a path, one with a `/` a path from the root): an excluded path is neither read nor written,
+  and a node the graph holds at such a path is deleted the next time a commit touches it. The decision is recorded on
+  the repository node (`code@Repository.artifacts`: `exclude` patterns, `include` ids, `code` 1.9.0) and the next runs
+  ask only about what they find anew. Parameters `artifacts` (`ask`, the default, `exclude`, `include`) and `exclude`
+  (patterns given); `goap-gitimport -artifacts exclude|include -exclude …`.

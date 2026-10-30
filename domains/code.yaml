@@ -1,5 +1,5 @@
 name: code
-version: 1.8.0
+version: 1.9.0
 description: >
   Source code held in git repositories (ADR 0147): a repository, its directories and its files as of the last commit
   imported. The git importer (platform/gitimport: the importer `git` below, served by importer-git, ADR 0148; the
@@ -8,7 +8,9 @@ description: >
   the versions of its entries, as a tree names the objects it holds). With the symbols read (Tree-sitter), a source file
   defines its declarations (functions, types, imports, variables...) by `defines` links, read back as "defined in".
   An entry or a declaration a commit removes is deleted (ADR 0172: a tombstone, the node leaves the state); added
-  again under the same key, the creation is requalified and restores the same node.
+  again under the same key, the creation is requalified and restores the same node. The build artifacts a repository
+  holds (dist/, node_modules/, target/, minified, compiled or generated files) are looked for when a run starts, the
+  person decides which to import anyway, and the rest is left out of every commit (the repository's artifacts).
 importers:
   - name: git
     label: Git repository
@@ -28,8 +30,16 @@ importers:
       - {name: code, label: Source text, type: boolean, default: true, description: "With the symbols, keep the source text of each declaration on its node (the code attribute, cut at 64 KiB)", order: 9}
       - {name: text, label: File text, type: boolean, default: true, description: "Keep the text of each file that reads as text, judged by its bytes whatever its name (UTF-8, UTF-16/32 with a byte order mark, Windows-1252), decoded to UTF-8 as its content; the other files are blobs named by their object id and the address of their content (ADR 0171)", order: 10}
       - {name: maxText, label: Largest text, type: number, default: 256, description: "The largest text kept, in KiB: a larger file is a blob", order: 11}
+      - {name: artifacts, label: Build artifacts, type: enum, enum: artifact-choice, default: ask, description: "What to do with the build artifacts found in the tree of the revision (dist/, node_modules/, target/, minified, compiled or generated files...) that no run decided on yet: ask which to import, leave them all out, or import them all", order: 13}
+      - {name: exclude, label: Leave out, description: "Paths left out of every commit, separated by commas: an element of a path (node_modules, *.min.js) or a path from the root (web/dist)", order: 14}
       - {name: contentUrl, label: Content address, description: "Address of the content of a file, the contentUrl of its node: {commit}, {path}, {blob} and {name} replaced (a web address, or lnk:<source>/File/{path} for a source the platform declares; default: the raw files of a repository of github.com, gitlab.com, bitbucket.org or codeberg.org, else none)", order: 12}
 enums:
+  - name: artifact-choice
+    description: What an import does with the build artifacts it finds
+    values:
+      - {value: ask, label: Ask, description: The run asks which ones to import before its first commit}
+      - {value: exclude, label: Leave them out}
+      - {value: include, label: Import them}
   - name: symbol-kind
     description: What a declaration of a source file is
     values:
@@ -91,6 +101,7 @@ nodeTypes:
       - {name: url, label: Source, description: Where the repository was imported from (a URL or a path), type: string, section: Origin, order: 20}
       - {name: ref, label: Followed, description: "Revision followed by the import (HEAD, a branch, a tag)", type: string, section: Origin, order: 21}
       - {name: commit, label: Commit, description: Object id of the last commit imported, type: string, section: Origin, order: 22}
+      - {name: artifacts, label: Build artifacts, description: "What the imports decided on the build artifacts: the paths left out of every commit (exclude, patterns) and the artifacts imported anyway (include)", type: json, section: Origin, order: 23}
   # a declaration of a source file, read by Tree-sitter: a new version when its own text changes
   - name: Symbol
     icon: code

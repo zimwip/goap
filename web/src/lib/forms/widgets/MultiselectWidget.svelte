@@ -4,6 +4,8 @@
 
   let { id, field, value, onchange, disabled }: WidgetProps = $props();
   const options = $derived(strings(field.constraints?.['options']));
+  /** what each option shows (the labels constraint), else its value */
+  const labels = $derived(strings(field.constraints?.['labels']));
   const chosen = $derived(strings(value));
   function toggle(o: string, on: boolean) {
     onchange(on ? [...chosen, o] : chosen.filter((x) => x !== o));
@@ -11,8 +13,8 @@
 </script>
 
 <div class="options" {id} role="group">
-  {#each options as o (o)}
-    <label><input type="checkbox" checked={chosen.includes(o)} {disabled} onchange={(e) => toggle(o, e.currentTarget.checked)} /> {o}</label>
+  {#each options as o, i (o)}
+    <label><input type="checkbox" checked={chosen.includes(o)} {disabled} onchange={(e) => toggle(o, e.currentTarget.checked)} /> {labels[i] || o}</label>
   {/each}
 </div>
 
