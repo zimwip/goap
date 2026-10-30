@@ -19,9 +19,6 @@ type cpost struct {
 	links []domain.Link
 	// effect is what post does to its node over pre (domain.EffectOf), recorded on its committed event
 	effect domain.ImpactEffect
-	// step is what post does over the version it was checked out from, the change's last commit of the node or pre:
-	// the effect of its change_impact row (ADR 0174)
-	step domain.ImpactEffect
 }
 
 // prepareChangeImpacts writes, from the drafts of the change impacts, the versions the commit produces (ADR 0079): a node
@@ -94,7 +91,8 @@ func (a *applier) prepareChangeImpacts() error {
 		todo = append(todo, commit{cn, *d})
 	}
 	// 1. the versions: the next version of each node, whatever the branch it was written on; the latest version of
-	// each node, and the latest on the change's branch, read in two statements
+	// each node, and the latest on the change's branch, read in two statements. Numbered first, written with their
+	// links once those are resolved to the numbers: a version is written whole (ADR 0174 addendum)
 	var ids []domain.NodeID
 	var keys []string // of the creations, checked free in one statement
 	for _, l := range todo {
@@ -119,7 +117,7 @@ func (a *applier) prepareChangeImpacts() error {
 	from := map[domain.NodeID]domain.Version{} // the version each draft was checked out from
 	nodes := make([]domain.Node, len(todo))
 	for i, l := range todo {
-		n, err := a.writeVersion(l.cn, l.d)
+		n, err := a.versionOf(l.cn, l.d)
 		if err != nil {
 			return err
 		}
@@ -131,7 +129,7 @@ func (a *applier) prepareChangeImpacts() error {
 			from[n.ID] = l.cn.Pre.Version
 		}
 	}
-	// 2. their links, to the versions of the change
+	// 2. the versions with their links, to the versions of the change
 	wrote := make([][]domain.Link, len(todo))
 	for i, l := range todo {
 		links := make([]domain.Link, 0, len(l.d.Links))
@@ -150,7 +148,7 @@ func (a *applier) prepareChangeImpacts() error {
 		for _, p := range nodes[i].Parents {
 			like = append(like, domain.NodeRef{ID: nodes[i].ID, Version: p})
 		}
-		if err := a.g.putLinks(a.ctx, a.tx, nodes[i], links, like...); err != nil {
+		if err := a.g.putVersion(a.ctx, a.tx, nodes[i], links, like...); err != nil {
 			return err
 		}
 		for j := range links {
@@ -179,19 +177,6 @@ func (a *applier) prepareChangeImpacts() error {
 		}
 		cp.effect = domain.EffectOf(cp.pre, preLinks, cp.post, cp.links)
 		cp.effect.Requalified = requalified[l.cn.ID]
-		cp.step = cp.effect
-		if b := l.d.Base; b != nil && (l.cn.Pre == nil || *b != *l.cn.Pre) {
-			// a commit after an earlier one of the change: its step from the version that one wrote
-			base, err := a.tx.Node(a.ctx, *b)
-			if err != nil {
-				return err
-			}
-			baseLinks, err := a.tx.OutLinks(a.ctx, base.Ref())
-			if err != nil {
-				return err
-			}
-			cp.step = domain.EffectOf(&base, baseLinks, cp.post, cp.links)
-		}
 		a.cposts = append(a.cposts, cp)
 		if nodes[i].Deleted {
 			a.target.remove(nodes[i].ID) // a tombstone: the node leaves the state (ADR 0172)
@@ -233,18 +218,19 @@ func (a *applier) loadEvents() error {
 	return nil
 }
 
-// writeVersion writes the version of a draft on the branch of the change: the next version number of the node, the
+// versionOf is the version of a draft on the branch of the change, written with its links (putVersion): the next
+// version number of the node, the
 // version the draft was checked out from as its parent, the origin of the change impact (its last review comment, else
 // its rationale). The node changing on the change branch since the draft was checked out is a conflict (the branch moved
 // by other means, such as the merge of a sub-change, ADR 0103).
-func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
+func (a *applier) versionOf(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
 	comment := cn.Rationale
 	if len(cn.Reviews) > 0 {
 		comment = cn.Reviews[len(cn.Reviews)-1].Comment
 	}
 	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
 		State: d.State, ChangeID: a.change.ID, Responsible: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now(),
-		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor, Deleted: d.Deleted}
+		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor, Deleted: d.Deleted, LogSeq: a.logSeq}
 	if d.Base == nil {
 		// a key is one node's: another change may have created it meanwhile
 		id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key)
@@ -268,7 +254,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 			return n, err
 		}
 		n.Reason = domain.ReasonCreate
-		return n, a.tx.PutNode(a.ctx, n)
+		return n, nil
 	}
 	last, ok := a.latest[d.Node]
 	if !ok {
@@ -287,7 +273,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		// branch, seen from it (ADR 0133)
 		n.Parents, n.Reason = append(n.Parents, d.MergedWith.Version), domain.ReasonRebase
 	}
-	return n, a.tx.PutNode(a.ctx, n)
+	return n, nil
 }
 
 // mainImpacts are the impacts of the main flow that count at commit.
@@ -378,7 +364,11 @@ func joinSorted(s []string) string {
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
 // heads, when given, are the nodes as the target holds them now (a fast-forward read them before it locked the target):
 // nothing is read of the target then.
-func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool, heads map[domain.NodeID]domain.Node) error {
+// The versions are never rewritten (ADR 0174 addendum): a version keeps the change, the impact and the entry that wrote
+// it, the branch taking it records the merge (branch_commit). seq, when set, is the position reserved for the entry
+// (the one the commits the target took name); then the reverts among moved, which no impact of the view holds, are
+// named by it too, for the impact they revert.
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool, heads map[domain.NodeID]domain.Node, seq int64, moved []domain.NodeRef) error {
 	commits := func(cn domain.ChangeImpact) bool {
 		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded &&
 			(only == nil || only[cn.Post.ID])
@@ -396,8 +386,10 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 			continue
 		}
 		post := *cn.Post
-		if post.IsDraft() && cn.Committed != nil {
-			post = *cn.Committed // checked out again after its commit, left as it was (ADR 0102)
+		if cn.Committed != nil {
+			// its last commit: checked out again since, left as it was (ADR 0102); a sub-change's version taken by the
+			// parent, which keeps its change (ADR 0174 addendum)
+			post = *cn.Committed
 		}
 		head, ok := byID[post.ID]
 		if !ok {
@@ -407,21 +399,30 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 			continue // left as is on the target: nothing of this change committed
 		}
 		ref := head.Ref()
-		comment := cn.Rationale
-		if len(cn.Reviews) > 0 {
-			comment = cn.Reviews[len(cn.Reviews)-1].Comment
-		}
-		// a version the change wrote itself already names it (a fast-forward): rewriting the row would only cost a new
-		// tuple and its index entries
-		if head.ChangeID != c.ID || head.ChangeImpact != cn.ID || head.Comment != comment {
-			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
-				return err
-			}
-		}
 		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
 	}
-	// one entry for the commit (ADR 0144)
-	return g.emit(ctx, tx, committed...)
+	if seq == 0 {
+		// one entry for the commit (ADR 0144)
+		return g.emit(ctx, tx, committed...)
+	}
+	named := make(map[domain.NodeRef]bool, len(committed))
+	for _, e := range committed {
+		named[*e.Committed] = true
+	}
+	for _, r := range moved {
+		if named[r] {
+			continue
+		}
+		n, err := tx.Node(ctx, r)
+		if err != nil {
+			return err
+		}
+		if n.Reason == domain.ReasonRevert && n.ChangeID == c.ID {
+			ref := n.Ref()
+			committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
+		}
+	}
+	return g.emitAt(ctx, tx, seq, committed...)
 }
 
 // targetNodes reads the latest version on the target of each node of a change that commits, in two statements.

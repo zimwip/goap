@@ -140,6 +140,10 @@ type Node struct {
 	// comment (else the rationale): the origin of the version (ADR 0024).
 	ChangeImpact ChangeImpactID `json:"changeImpact,omitempty"`
 	Comment      string         `json:"comment,omitempty"`
+	// LogSeq is the position of the entry of the log of its change that committed it: a change commits several
+	// times, so the impact alone does not say which of its commits wrote the version; its view read at LogSeq does
+	// (what made it then: intent, rationale, review). 0: not committed by a change (a fixture).
+	LogSeq int64 `json:"logSeq,omitempty"`
 	// Execution is the journal execution (action run) that wrote this version: what a
 	// relaunch of a step marks stale (ADR 0025).
 	Execution string `json:"execution,omitempty"`

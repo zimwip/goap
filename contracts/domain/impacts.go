@@ -13,7 +13,10 @@ const ImpactBlock = 16
 // rather than the list (a change of N impacts written N times copied N² impacts); any other list is a slice cut in
 // blocks (ImpactsOf). The zero value is the empty list.
 type Impacts struct {
-	blocks [][]ChangeImpact
+	// flat is the list of a slice (ImpactsOf); else blocks, of pointers to impacts never edited, so that a copy of a
+	// block copies pointers, not impacts
+	flat   []ChangeImpact
+	blocks [][]*ChangeImpact
 	n      int
 	// look, when set, finds the impacts of the first looked positions without a walk (IndexedImpacts); the positions
 	// after them (Append) are walked
@@ -40,19 +43,16 @@ func ImpactsOf(s []ChangeImpact) Impacts {
 	if len(s) == 0 {
 		return Impacts{}
 	}
-	blocks := make([][]ChangeImpact, 0, (len(s)+ImpactBlock-1)/ImpactBlock)
-	for i := 0; i < len(s); i += ImpactBlock {
-		blocks = append(blocks, s[i:min(i+ImpactBlock, len(s)):min(i+ImpactBlock, len(s))])
-	}
-	return Impacts{blocks: blocks, n: len(s)}
+	return Impacts{flat: s, n: len(s)}
 }
 
 // ImpactsOfBlocks is the list of blocks of ImpactBlock impacts each but the last, which it shares: the holder of the
-// blocks keeps them as they are while the list is read (a write of the view copies the block first).
-func ImpactsOfBlocks(blocks [][]ChangeImpact, n int) Impacts { return Impacts{blocks: blocks, n: n} }
+// blocks keeps them as they are while the list is read (a write of the view copies the block first), and never edits
+// an impact they point to.
+func ImpactsOfBlocks(blocks [][]*ChangeImpact, n int) Impacts { return Impacts{blocks: blocks, n: n} }
 
 // IndexedImpacts is ImpactsOfBlocks with the lookup of the holder of the blocks, which answers for these n impacts.
-func IndexedImpacts(blocks [][]ChangeImpact, n int, look ImpactLookup) Impacts {
+func IndexedImpacts(blocks [][]*ChangeImpact, n int, look ImpactLookup) Impacts {
 	return Impacts{blocks: blocks, n: n, look: look, looked: n}
 }
 
@@ -60,15 +60,28 @@ func IndexedImpacts(blocks [][]ChangeImpact, n int, look ImpactLookup) Impacts {
 func (l Impacts) Len() int { return l.n }
 
 // At is the impact at a position of the list.
-func (l Impacts) At(i int) ChangeImpact { return l.blocks[i/ImpactBlock][i%ImpactBlock] }
+func (l Impacts) At(i int) ChangeImpact {
+	if l.flat != nil {
+		return l.flat[i]
+	}
+	return *l.blocks[i/ImpactBlock][i%ImpactBlock]
+}
 
 // All iterates over the impacts of the list in their order, with their positions.
 func (l Impacts) All() iter.Seq2[int, ChangeImpact] {
 	return func(yield func(int, ChangeImpact) bool) {
+		if l.flat != nil {
+			for i, cn := range l.flat {
+				if !yield(i, cn) {
+					return
+				}
+			}
+			return
+		}
 		i := 0
 		for _, b := range l.blocks {
 			for _, cn := range b {
-				if !yield(i, cn) {
+				if !yield(i, *cn) {
 					return
 				}
 				i++
@@ -162,33 +175,55 @@ func (l Impacts) Slice() []ChangeImpact {
 	if l.n == 0 {
 		return nil
 	}
+	if l.flat != nil {
+		return slices.Clone(l.flat)
+	}
 	out := make([]ChangeImpact, 0, l.n)
 	for _, b := range l.blocks {
-		out = append(out, b...)
+		for _, cn := range b {
+			out = append(out, *cn)
+		}
 	}
 	return out
 }
 
+// pointed is the list in blocks of pointers (a list of a slice points into it).
+func (l Impacts) pointed() [][]*ChangeImpact {
+	if l.flat == nil {
+		return l.blocks
+	}
+	blocks := make([][]*ChangeImpact, 0, (l.n+ImpactBlock-1)/ImpactBlock)
+	for i := 0; i < l.n; i += ImpactBlock {
+		b := make([]*ChangeImpact, 0, ImpactBlock)
+		for j := i; j < min(i+ImpactBlock, l.n); j++ {
+			b = append(b, &l.flat[j])
+		}
+		blocks = append(blocks, b)
+	}
+	return blocks
+}
+
 // Append is the list with an impact more: its last block copied, the others shared.
 func (l Impacts) Append(cn ChangeImpact) Impacts {
-	blocks := make([][]ChangeImpact, len(l.blocks), len(l.blocks)+1)
-	copy(blocks, l.blocks)
+	own := l.pointed()
+	blocks := make([][]*ChangeImpact, len(own), len(own)+1)
+	copy(blocks, own)
 	if k := len(blocks) - 1; k >= 0 && len(blocks[k]) < ImpactBlock {
-		b := make([]ChangeImpact, len(blocks[k]), len(blocks[k])+1)
+		b := make([]*ChangeImpact, len(blocks[k]), len(blocks[k])+1)
 		copy(b, blocks[k])
-		blocks[k] = append(b, cn)
+		blocks[k] = append(b, &cn)
 	} else {
-		blocks = append(blocks, []ChangeImpact{cn})
+		blocks = append(blocks, []*ChangeImpact{&cn})
 	}
 	return Impacts{blocks: blocks, n: l.n + 1, look: l.look, looked: l.looked}
 }
 
 // Set is the list with the impact at a position replaced: the block holding it copied, the others shared.
 func (l Impacts) Set(i int, cn ChangeImpact) Impacts {
-	blocks := slices.Clone(l.blocks)
+	blocks := slices.Clone(l.pointed())
 	k := i / ImpactBlock
 	blocks[k] = slices.Clone(blocks[k])
-	blocks[k][i%ImpactBlock] = cn
+	blocks[k][i%ImpactBlock] = &cn
 	return Impacts{blocks: blocks, n: l.n}
 }
 

@@ -58,13 +58,13 @@ func diffCommits(ctx context.Context, tx Tx, from, to domain.CommitID) ([]Commit
 		if !ok {
 			continue
 		}
-		// the versions it wrote (ADR 0174)
-		rows, err := tx.CommitImpacts(ctx, id)
+		// the nodes it wrote versions of
+		nodes, err := tx.ChangeNodeIDs(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		for _, r := range rows {
-			add(r.Node)
+		for _, n := range nodes {
+			add(n)
 		}
 		if c.Branch != "" {
 			// what its branch holds: a node it reverted keeps no impact

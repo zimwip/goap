@@ -4,7 +4,6 @@ package graph
 
 import (
 	"context"
-	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
@@ -144,18 +143,17 @@ type Tx interface {
 	// change, read by its parent rather than by a scan of every change.
 	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)
 
-	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
-	// node in a change is a draft, the version is written when the change commits.
-	PutNode(ctx context.Context, n domain.Node) error
+	// PutNode writes a node version, with how it holds its links (ADR 0141): the set of an earlier version of the node
+	// as is (Of), or its own rows as a delta over the set of one (Base); the zero set, its own rows. A version is
+	// written once and never changes (ADR 0079): the working state of a node in a change is a draft, the version is
+	// written whole when the change commits, nothing of it set afterwards.
+	PutNode(ctx context.Context, n domain.Node, links LinkSet) error
 	// PutLinks writes links of the sets of versions written in the same transaction (ADR 0141), a whole set in a few
 	// statements; Link reads one, as leaving the version that wrote it.
 	PutLinks(ctx context.Context, ls []domain.Link) error
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
-	// PutLinkSet says how a version written in the same transaction holds its links (ADR 0141): the set of an earlier
-	// version of the node as is (Of), or its own rows as a delta over the set of one (Base); a version left alone
-	// holds its own rows. DropLink writes a row of the delta of a version taking out a link of the set it is a delta
-	// over. LinkSetOf reads how a version holds its links.
-	PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error
+	// DropLink writes a row of the delta of a version taking out a link of the set it is a delta over. LinkSetOf reads
+	// how a version holds its links.
 	DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, dropped domain.Link) error
 	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
 	// LinkSetsOf is LinkSetOf for several versions, in one read: a version that does not exist has no entry.
@@ -170,7 +168,8 @@ type Tx interface {
 	// PutChange inserts or updates the change header (items are ignored).
 	PutChange(ctx context.Context, c domain.Change) error
 	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in
-	// one order) and returns it with its Seq. The log is insert-only: nothing updates or deletes an entry.
+	// one order) and returns it with its Seq, the position reserved for it when e.Seq is set (ReserveLogSeq). The log
+	// is insert-only: nothing updates or deletes an entry.
 	AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error)
 	// AppendOutbox writes the events of the transaction in the outbox of the graph (ADR 0136), published once it
 	// commits.
@@ -182,23 +181,25 @@ type Tx interface {
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
-	// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): one row per version, written with
-	// it and never updated. Nothing else writes them: before its commit an impact lives in the log of its change.
-	PutCommitImpacts(ctx context.Context, rows []CommitImpact) error
-	// CommitImpacts lists the change impacts of the versions a change wrote, in the order of its log.
-	CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error)
+	// ChangeNodeIDs lists the nodes a change wrote versions of. What made each version (its change impact, the review
+	// that let it commit) is the view of the change, read by the impact the version names (ADR 0174 addendum).
+	ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error)
 	// NodeChangePage lists the last limit changes whose log names a node in an impact entry whose cursor is below before
 	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
 	// history, whatever its length; ADR 0174: committed or not, read from the log).
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
-	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
-	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
+	// ReserveLogSeq reserves the position the next entry of the log of a change takes: the versions a commit writes
+	// name the entry committing them as they are written (node_version.log_seq), the entry appended after them with
+	// that position (AppendLog with e.Seq set).
+	ReserveLogSeq(ctx context.Context, change domain.ChangeID) (int64, error)
 
 	// JoinCommits makes a branch take commits of another branch as they are (a merge, ADR 0176): their versions are
 	// not copied and keep the branch they were written on, the branch holds them from the order at (the guard of the
 	// graph sets it, ADR 0140). change is the change whose merge makes it take them (ADR 0054: no membership without a
-	// change); a commit the branch took already keeps the order it was taken at.
-	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error
+	// change), logSeq the entry of that change's log recording it (0: none, a commit of the branch's own or a move of
+	// its fork); a commit the branch took already keeps the order it was taken at. A version is never rewritten when a
+	// branch takes it: the row is the record of the integration (ADR 0174 addendum).
+	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error
 	// JoinedCommits lists the orders of the commits a branch took from the order after up to upTo.
 	JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error)
 
@@ -214,31 +215,6 @@ type Tx interface {
 	// head is read to be moved. A storage whose transactions are serialized already does nothing.
 	LockChange(ctx context.Context, id domain.ChangeID) error
 	LockBranch(ctx context.Context, namespace, name string) error
-}
-
-// CommitImpact is the change impact a version was written for (ADR 0174): from the version the change started from
-// (Pre; 0 for a creation) to the version written (Node, Version), MergedWith the second parent of a rebase or a merge,
-// and LogSeq the entry of the change log that recorded the commit (0: none, the bootstrap). Impact is empty for a
-// version no impact holds (the revert of a withdrawn impact).
-type CommitImpact struct {
-	Node       domain.NodeID         `json:"node"`
-	Version    domain.Version        `json:"version"`
-	Change     domain.ChangeID       `json:"change"`
-	Impact     domain.ChangeImpactID `json:"impact,omitempty"`
-	Key        string                `json:"key"`
-	Type       string                `json:"type"`
-	Intent     domain.NodeIntent     `json:"intent"`
-	Rationale  string                `json:"rationale,omitempty"`
-	Pre        domain.Version        `json:"pre,omitempty"`
-	MergedWith domain.Version        `json:"mergedWith,omitempty"`
-	Reason     string                `json:"reason"`
-	Review     *domain.Review        `json:"review,omitempty"`
-	Effect     domain.ImpactEffect   `json:"effect,omitzero"`
-	LogSeq     int64                 `json:"logSeq,omitempty"`
-	ProducedBy string                `json:"producedBy,omitempty"`
-	Execution  string                `json:"execution,omitempty"`
-	Via        domain.ChangeImpactID `json:"via,omitempty"`
-	CreatedAt  time.Time             `json:"createdAt"`
 }
 
 // NodeChange is a change acting on a node and its cursor in the node's history (Tx.NodeChangePage).

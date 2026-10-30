@@ -21,6 +21,8 @@ type VersionJoin struct {
 	Version Version  `json:"version"`
 	Branch  string   `json:"branch"`
 	Change  ChangeID `json:"change"`
+	// LogSeq is the entry of the log of Change recording the merge (0: none)
+	LogSeq int64 `json:"logSeq,omitempty"`
 }
 
 // VersionStep is a version of the lineage of a node version.

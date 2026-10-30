@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -45,8 +44,6 @@ type memState struct {
 	joins map[joinKey]memJoin
 	// seq is the order of the last commit allocated (ADR 0140)
 	seq int64
-	// impacts are the change impacts of the versions each change wrote (ADR 0174), in the order written
-	impacts map[domain.ChangeID][]CommitImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
 	// tags name node versions (ADR 0143 §6), in creation order
@@ -62,7 +59,6 @@ func NewMemory() *Memory {
 		changes:  map[domain.ChangeID]domain.Change{},
 		branches: map[string]domain.Branch{},
 		joins:    map[joinKey]memJoin{},
-		impacts:  map[domain.ChangeID][]CommitImpact{},
 		sets:     map[domain.NodeRef]LinkSet{},
 	}}
 }
@@ -90,10 +86,6 @@ func (s memState) clone() memState {
 		log:      slices.Clone(s.log),
 		tags:     slices.Clone(s.tags),
 		seq:      s.seq,
-		impacts:  make(map[domain.ChangeID][]CommitImpact, len(s.impacts)),
-	}
-	for k, v := range s.impacts {
-		c.impacts[k] = slices.Clone(v)
 	}
 	for k, v := range s.versions {
 		c.versions[k] = slices.Clone(v)
@@ -190,6 +182,7 @@ type joinKey struct {
 type memJoin struct {
 	change domain.ChangeID
 	at     int64
+	logSeq int64
 }
 
 // on reports whether a version is part of a branch: of a commit the branch holds.
@@ -585,7 +578,7 @@ func (t *memTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domai
 	return out, nil
 }
 
-func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
+func (t *memTx) PutNode(_ context.Context, n domain.Node, links LinkSet) error {
 	if err := t.write(); err != nil {
 		return err
 	}
@@ -606,6 +599,12 @@ func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 		n.Creator = vs[0].Creator
 	}
 	t.st.versions[n.ID] = append(vs, n)
+	if links != (LinkSet{}) {
+		if links.Of == 0 {
+			links.Of = n.Version
+		}
+		t.st.sets[n.Ref()] = links
+	}
 	return nil
 }
 
@@ -639,17 +638,6 @@ func (t *memTx) DropLink(_ context.Context, from domain.NodeRef, row domain.Link
 		return err
 	}
 	t.st.drops = append(t.st.drops, memDrop{row: row, from: from, removes: l.ID, to: l.To, change: l.ChangeID})
-	return nil
-}
-
-func (t *memTx) PutLinkSet(_ context.Context, from domain.NodeRef, set LinkSet) error {
-	if err := t.write(); err != nil {
-		return err
-	}
-	if set.Of == 0 {
-		set.Of = from.Version
-	}
-	t.st.sets[from] = set
 	return nil
 }
 
@@ -819,7 +807,8 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 	var out []domain.VersionJoin
 	for _, v := range t.st.versions[id] {
 		for _, k := range t.takers(v) {
-			out = append(out, domain.VersionJoin{Version: v.Version, Branch: k.branch, Change: t.st.joins[k].change})
+			j := t.st.joins[k]
+			out = append(out, domain.VersionJoin{Version: v.Version, Branch: k.branch, Change: j.change, LogSeq: j.logSeq})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -852,6 +841,9 @@ func (t *memTx) AppendLog(_ context.Context, e domain.LogEntry) (domain.LogEntry
 		}
 	}
 	e.Payload = slices.Clone(e.Payload)
+	if next := int64(len(t.st.log) + 1); e.Seq != 0 && e.Seq != next {
+		return e, fmt.Errorf("log entry %s: position %d reserved, the next is %d: %w", e.ID, e.Seq, next, ErrConflict)
+	}
 	e.Seq = int64(len(t.st.log) + 1)
 	t.st.log = append(t.st.log, e)
 	return e, nil
@@ -892,30 +884,18 @@ func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
-// PutCommitImpacts implements Tx.
-func (t *memTx) PutCommitImpacts(_ context.Context, rows []CommitImpact) error {
-	if err := t.write(); err != nil {
-		return err
-	}
-	for _, r := range rows {
-		if _, ok := t.st.changes[r.Change]; !ok {
-			return fmt.Errorf("change %s: %w", r.Change, ErrNotFound)
-		}
-		for _, list := range t.st.impacts {
-			for _, x := range list {
-				if x.Node == r.Node && x.Version == r.Version {
-					return fmt.Errorf("change impact of %s v%d: %w", r.Key, r.Version, ErrConflict)
-				}
+// ChangeNodeIDs implements Tx.
+func (t *memTx) ChangeNodeIDs(_ context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
+	var out []domain.NodeID
+	for id, vs := range t.st.versions {
+		for _, n := range vs {
+			if n.ChangeID == change {
+				out = append(out, id)
+				break
 			}
 		}
-		t.st.impacts[r.Change] = append(t.st.impacts[r.Change], r)
 	}
-	return nil
-}
-
-func (t *memTx) CommitImpacts(_ context.Context, change domain.ChangeID) ([]CommitImpact, error) {
-	out := slices.Clone(t.st.impacts[change])
-	slices.SortStableFunc(out, func(a, b CommitImpact) int { return cmp.Compare(a.LogSeq, b.LogSeq) })
+	slices.Sort(out)
 	return out, nil
 }
 
@@ -942,26 +922,21 @@ func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int
 	return out, nil
 }
 
-func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
+func (t *memTx) ReserveLogSeq(_ context.Context, _ domain.ChangeID) (int64, error) {
 	if err := t.write(); err != nil {
-		return err
+		return 0, err
 	}
-	vs := t.st.versions[ref.ID]
-	if ref.Version < 1 || int(ref.Version) > len(vs) {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeImpact, vs[ref.Version-1].Comment = change, cn, comment
-	return nil
+	return int64(len(t.st.log) + 1), nil
 }
 
-func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
+func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
 	if err := t.write(); err != nil {
 		return err
 	}
 	branch = domain.BranchOf(branch)
 	for _, seq := range seqs {
 		if _, ok := t.st.joins[joinKey{branch, seq}]; !ok {
-			t.st.joins[joinKey{branch, seq}] = memJoin{change: change, at: at}
+			t.st.joins[joinKey{branch, seq}] = memJoin{change: change, at: at, logSeq: logSeq}
 		}
 	}
 	return nil
@@ -1102,7 +1077,6 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 		}
 	}
 	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
-	delete(t.st.impacts, id)
 	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return removed(tag.Ref()) })
 	if branch != "" {
 		delete(t.st.branches, branchKey(namespace, branch))

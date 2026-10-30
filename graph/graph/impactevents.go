@@ -48,7 +48,7 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 		for n < len(events) && domain.SameEntry(events[0], events[n]) {
 			n++
 		}
-		if err := g.emitEntry(ctx, tx, events[:n], s); err != nil {
+		if err := g.emitEntry(ctx, tx, events[:n], s, 0); err != nil {
 			return err
 		}
 		events = events[n:]
@@ -117,7 +117,7 @@ func (g *Graph) stage(ctx context.Context, tx Tx, s *impactStage, e domain.Impac
 		}
 		e.At = s.events[0].At
 	}
-	return g.emitEntry(ctx, tx, []domain.ImpactEvent{e}, s)
+	return g.emitEntry(ctx, tx, []domain.ImpactEvent{e}, s, 0)
 }
 
 // flush logs the staged events as one entry.
@@ -188,9 +188,27 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	return nil
 }
 
-// emitEntry appends one log entry carrying the events (SameEntry) and applies them to the fold of the change; staged
-// (s set), it applies them and leaves the entry to flush.
-func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEvent, s *impactStage) error {
+// emitAt emits the events of one entry at the position reserved for it (Tx.ReserveLogSeq): the commit of the
+// versions written naming it (ADR 0174 addendum).
+func (g *Graph) emitAt(ctx context.Context, tx Tx, seq int64, events ...domain.ImpactEvent) error {
+	if len(events) == 0 {
+		return fmt.Errorf("log position %d reserved for no event", seq)
+	}
+	for i := range events {
+		g.envelope(ctx, &events[i])
+		if !domain.SameEntry(events[0], events[i]) {
+			return fmt.Errorf("change %s: event %s of %s is not one entry with %s of %s", events[i].Change, events[i].Op, events[i].Impact, events[0].Op, events[0].Impact)
+		}
+	}
+	if st, ok := ctx.Value(entriesKey{g}).(*impactStage); ok && st.change == events[0].Change {
+		return fmt.Errorf("change %s: a commit is not staged", st.change)
+	}
+	return g.emitEntry(ctx, tx, events, nil, seq)
+}
+
+// emitEntry appends one log entry carrying the events (SameEntry), at the position at when reserved, and applies them
+// to the fold of the change; staged (s set), it applies them and leaves the entry to flush.
+func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEvent, s *impactStage, at int64) error {
 	change := events[0].Change
 	id := g.newID()
 	if s != nil && !s.separate {
@@ -237,6 +255,7 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 		if err != nil {
 			return err
 		}
+		entry.Seq = at
 		if entry, err = tx.AppendLog(ctx, entry); err != nil {
 			return err
 		}

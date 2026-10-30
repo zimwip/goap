@@ -73,7 +73,7 @@ The merge now reads first and locks last:
 - the rebase reads the head of the target without its lock (`rebaseIn`) and writes on the change's branch only, which
   the lock of its tree holds;
 - the fast-forward reads what it writes against the head it read, and moves the fork of the branch there when the
-  target moved on other nodes (`prepareFastForward`);
+  target moved on other nodes (`checkFastForward`, `finishFastForward`);
 - it then locks the target and reads its head again: unchanged, it only writes (`applyFastForward`: the commits taken,
   the header, the head moved, the impacts committed); moved, it is `errTargetMoved`, and the merge rebases onto the new
   head under the lock it now holds, then merges as before (a fast-forward, or the three-way merge of a race).
@@ -87,6 +87,12 @@ Then the window between the plan and the lock, and what is left under the lock:
 - the commit of the impacts on the target read the versions the target holds once it took the commits (two
   statements); the plan knows them (the versions it moves the nodes to, the tombstones) and reads the nodes before the
   lock (`targetHeads`, `fastForwardPlan.heads` given to `commit`).
+
+A plan read again while the head moved first moved the fork at each read, so a merge could record two or three
+`rebase` commits on the change's branch in one transaction, each onto a head no one read the branch at. The reads that
+decide are now apart from the move (`checkFastForward` writes nothing, `finishFastForward` moves the fork): the plan is
+read again until the head stands, then the fork is moved once, onto that head. A head moved at the lock all the same
+moves it a second time, under the lock (one merge in five with 4 writers); a merge records at most two.
 
 Under the lock remain the commits taken, the header, the head moved, the `committed` entry, the header of the change
 and the COMMIT. A merge that lost the race reads its plan twice; the result is the one of a merge locked from the start.

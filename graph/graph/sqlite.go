@@ -146,9 +146,10 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var n domain.Node
 	var id, p, created, parents, origins string
 	var change, cnode sql.NullString
+	var logSeq sql.NullInt64
 	var owner, project, creatorUnit string
 	var version int
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility, &logSeq); err != nil {
 		return n, err
 	}
 	n.Origins = originsOf([]byte(origins))
@@ -158,6 +159,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props([]byte(p)), domain.ChangeID(change.String)
 	n.ChangeImpact = domain.ChangeImpactID(cnode.String)
+	n.LogSeq = logSeq.Int64
 	n.Responsible, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
 	n.CreatedAt = tsParse(created)
 	return n, nil
@@ -615,10 +617,12 @@ func (t *sqliteTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain
 	for rows.Next() {
 		var v int
 		var j domain.VersionJoin
-		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change)); err != nil {
+		var seq sql.NullInt64
+		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change), &seq); err != nil {
 			return nil, err
 		}
 		j.Version = domain.Version(v)
+		j.LogSeq = seq.Int64
 		out = append(out, j)
 	}
 	return out, rows.Err()
@@ -746,18 +750,10 @@ func (t *sqliteTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]do
 	return out, nil
 }
 
-func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
+func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
 	if n.Version == 1 {
-		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, namespace, key, type, latest, project, creator, creator_unit) VALUES (?, ?, ?, ?, 1, ?, ?, ?)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String(), n.Creator.Subject, n.Creator.Unit.String()); err != nil {
+		if _, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node", nodeColumns, ""), nodeArgs(n)...); err != nil {
 			return sqliteErr(err, "node "+n.Key)
-		}
-	} else {
-		res, err := t.tx.ExecContext(ctx, `UPDATE node SET latest = ?2 WHERE id = ?1 AND latest = ?2 - 1`, string(n.ID), int(n.Version))
-		if err != nil {
-			return sqliteErr(err, "node "+n.Ref().String())
-		}
-		if k, _ := res.RowsAffected(); k != 1 {
-			return fmt.Errorf("node %s: not the next version: %w", n.Ref(), ErrConflict)
 		}
 	}
 	parents := n.Parents
@@ -765,9 +761,10 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents = []domain.Version{}
 	}
 	pj, _ := json.Marshal(parents)
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility)
+	args := append([]any{string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility, nullSeq(n.LogSeq)},
+		linkSetArgs(n, links)...)
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""), args...)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -814,18 +811,6 @@ func (t *sqliteTx) DropLink(ctx context.Context, from domain.NodeRef, row domain
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
 		string(row), l.Type, string(from.ID), int(from.Version), to, tv, string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), string(l.ID), url)
 	return sqliteErr(err, "link")
-}
-
-func (t *sqliteTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
-	var of, base any
-	if set.Of != 0 && set.Of != from.Version {
-		of = int(set.Of)
-	}
-	if set.Base != 0 {
-		base = int(set.Base)
-	}
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth, set.Seq)
-	return sqliteErr(err, "link set")
 }
 
 func (t *sqliteTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
@@ -881,6 +866,12 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if e.Seq != 0 {
+		// its position reserved (ReserveLogSeq)
+		_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
+			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
+		return e, sqliteErr(err, "log entry "+e.Type)
+	}
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
 	if err != nil {
@@ -946,48 +937,20 @@ func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 	return out, rows.Err()
 }
 
-// PutCommitImpacts implements Tx.
-func (t *sqliteTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
-	for chunk := range slices.Chunk(rows, sqliteCommitImpactRows) {
-		args := make([]any, 0, len(chunk)*len(commitImpactColumns))
-		for _, r := range chunk {
-			a, err := commitImpactArgs(r)
-			if err != nil {
-				return err
-			}
-			args = append(append(args, a...), tsText(r.CreatedAt))
-		}
-		if _, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsertRows("change_impact", commitImpactColumns, len(chunk)), args...); err != nil {
-			return sqliteErr(err, "change impacts")
-		}
-	}
-	return nil
-}
-
-// sqliteCommitImpactRows is the number of change_impact rows one statement writes (18 arguments each, within the
-// 32766 a statement takes).
-const sqliteCommitImpactRows = 1000
-
-func (t *sqliteTx) CommitImpacts(ctx context.Context, change domain.ChangeID) ([]CommitImpact, error) {
-	q, args := dialectSQLite.sqlCommitImpacts(change)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
+// ChangeNodeIDs implements Tx.
+func (t *sqliteTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
+	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlChangeNodes(), string(change))
 	if err != nil {
-		return nil, sqliteErr(err, "change impacts")
+		return nil, sqliteErr(err, "change nodes")
 	}
 	defer rows.Close()
-	var out []CommitImpact
+	var out []domain.NodeID
 	for rows.Next() {
-		var r commitImpactRow
-		var at string
-		if err := rows.Scan(append(r.dest(), &at)...); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		ci, err := r.impactOf()
-		if err != nil {
-			return nil, err
-		}
-		ci.CreatedAt = tsParse(at)
-		out = append(out, ci)
+		out = append(out, domain.NodeID(id))
 	}
 	return out, rows.Err()
 }
@@ -1010,19 +973,19 @@ func (t *sqliteTx) NodeChangePage(ctx context.Context, node domain.NodeID, befor
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
-	if err != nil {
-		return sqliteErr(err, "node "+ref.String())
+// ReserveLogSeq is the position the next entry of the log takes: the one connection writing, nothing takes it first
+// but an entry of this transaction.
+func (t *sqliteTx) ReserveLogSeq(ctx context.Context, _ domain.ChangeID) (int64, error) {
+	if err := t.writes(); err != nil {
+		return 0, err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return nil
+	var seq int64
+	err := t.tx.QueryRowContext(ctx, `SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'change_log'), 0) + 1`).Scan(&seq)
+	return seq, sqliteErr(err, "log position")
 }
 
-func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
-	q, args := dialectSQLite.sqlJoinCommits(branch, change, at, seqs)
+func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
+	q, args := dialectSQLite.sqlJoinCommits(branch, change, at, logSeq, seqs)
 	_, err := t.tx.ExecContext(ctx, q, args...)
 	return sqliteErr(err, "branch "+branch)
 }
@@ -1117,9 +1080,6 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 	}
 	for _, n := range nodes {
 		if _, err := t.tx.ExecContext(ctx, d.sqlDeleteOrphanNode(), n); err != nil {
-			return sqliteErr(err, "node "+n)
-		}
-		if _, err := t.tx.ExecContext(ctx, d.sqlRefreshLatest(), n); err != nil {
 			return sqliteErr(err, "node "+n)
 		}
 	}

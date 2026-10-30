@@ -89,17 +89,12 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		n := domain.Node{ID: ids[st.Kind], Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate, Namespace: st.Namespace,
 			Key: st.Root, Type: st.Type, Properties: maps.Clone(st.Bootstrap), ChangeID: c.ID, Comment: c.Intent,
 			Responsible: g.StructureURL(org.Kind, org.Root), Project: g.StructureURL(proj.Kind, proj.Root), CreatedAt: now}
-		if err := tx.PutNode(ctx, n); err != nil {
-			return err
-		}
-		// its change impact (ADR 0174): the bootstrap logs nothing
-		if err := tx.PutCommitImpacts(ctx, []CommitImpact{commitImpactOf(n, domain.ChangeImpact{Intent: domain.IntentCreated, Rationale: c.Intent}, domain.ImpactEffect{Kind: domain.EffectCreated}, 0)}); err != nil {
-			return err
-		}
+		var links []domain.Link
 		if st.SelfParent {
-			if err := tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: st.Parent, From: n.Ref(), To: n.Ref(), ChangeID: c.ID}}); err != nil {
-				return err
-			}
+			links = []domain.Link{{ID: domain.LinkID(g.newID()), Type: st.Parent, To: n.Ref()}}
+		}
+		if err := g.putVersion(ctx, tx, n, links); err != nil {
+			return err
 		}
 	}
 	for _, ns := range namespaces {

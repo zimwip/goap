@@ -107,7 +107,7 @@ func linkTo(prefix string) []sqlCol {
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"), sc("n.creator"), sc("n.creator_unit"), sc("v.editor"), sc("v.visibility"))
+		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"), sc("n.creator"), sc("n.creator_unit"), sc("v.editor"), sc("v.visibility"), sc("v.log_seq"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -197,7 +197,7 @@ func (d dialect) sqlVersionBranches(id domain.NodeID, from domain.Version) (stri
 // sqlVersionJoins reads the branches that took the commits of the versions of a node and the changes whose merge made
 // them take them (ADR 0133, 0176).
 func (d dialect) sqlVersionJoins(id domain.NodeID) (string, []any) {
-	return `SELECT v.version, j.branch, ` + d.id("j.change_id") + ` FROM node_version v JOIN branch_commit j ON j.seq = v.committed
+	return `SELECT v.version, j.branch, ` + d.id("j.change_id") + `, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed
 		WHERE v.node_id = ` + d.ph(1) + ` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{string(id)}
 }
 
@@ -288,16 +288,16 @@ func (d dialect) sqlJoinedCommits(branch string, after, upTo int64) (string, []a
 		[]any{domain.BranchOf(branch), after, upTo}
 }
 
-// sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, then the list of their orders; a
-// commit the branch took already keeps the order it was taken at.
-func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at int64, seqs []int64) (string, []any) {
+// sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, the log entry recording it, then
+// the list of their orders; a commit the branch took already keeps the order it was taken at.
+func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) (string, []any) {
 	if d.pg {
-		return `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`,
-			[]any{domain.BranchOf(branch), string(change), at, seqs}
+		return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`,
+			[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), seqs}
 	}
 	b, _ := json.Marshal(seqs)
-	return `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`,
-		[]any{domain.BranchOf(branch), string(change), at, string(b)}
+	return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ?1, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`,
+		[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), string(b)}
 }
 
 func nodeIDStrings(ids []domain.NodeID) []string {
@@ -474,10 +474,11 @@ func (d dialect) linksToRest() string {
 		ORDER BY 1, 4`
 }
 
-// sqlLatestVersions reads the number of the latest version of several nodes: node, version.
+// sqlLatestVersions reads the number of the latest version of several nodes, whatever the branch: node, version. The
+// greatest version a node has, read on the key of node_version: nothing keeps it apart (ADR 0174 addendum).
 func (d dialect) sqlLatestVersions(ids []domain.NodeID) (string, []any) {
-	in, arg := d.nodeIDList("id", 1, ids)
-	return `SELECT ` + d.id("id") + `, latest FROM node WHERE ` + in, []any{arg}
+	in, arg := d.nodeIDList("node_id", 1, ids)
+	return `SELECT ` + d.id("node_id") + `, max(version) FROM node_version WHERE ` + in + ` GROUP BY node_id`, []any{arg}
 }
 
 // sqlLatestVersionsOn reads the version sqlLatestOn reads for several nodes: node, version.
@@ -502,12 +503,6 @@ func (d dialect) sqlLinkSetsOf(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
 	return `SELECT ` + d.id("v.node_id") + `, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v` +
 		d.refsJoin("r", "v.node_id", "v.version", 1), args
-}
-
-// sqlPutLinkSet sets how a version holds its links: arguments node, version, links (nil: its own), base (nil: a whole
-// set), depth, order.
-func (d dialect) sqlPutLinkSet() string {
-	return `UPDATE node_version SET links = ` + d.ph(3) + `, links_base = ` + d.ph(4) + `, links_depth = ` + d.ph(5) + `, links_seq = ` + d.ph(6) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
 // linkCols is the select list of a link.
@@ -585,7 +580,7 @@ func (d dialect) sqlStoreCounts(namespace string) map[string]string {
 		StatNodesByType:      `SELECT type, count(*) FROM node WHERE namespace = ` + ns + ` GROUP BY type`,
 		StatVersionsByType:   `SELECT n.type, count(*)` + versions + ` GROUP BY n.type`,
 		StatVersionsByReason: `SELECT v.reason, count(*)` + versions + ` GROUP BY v.reason`,
-		StatVersionsPerNode:  `SELECT CAST(latest AS text), count(*) FROM node WHERE namespace = ` + ns + ` GROUP BY latest`,
+		StatVersionsPerNode:  `SELECT CAST(l.latest AS text), count(*) FROM (SELECT max(v.version) AS latest FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.namespace = ` + ns + ` GROUP BY n.id) l GROUP BY l.latest`,
 		StatLinkRowsByType:   `SELECT l.type, count(*)` + links + ` AND l.removes IS NULL GROUP BY l.type`,
 		StatLinkDrops:        `SELECT l.type, count(*)` + links + ` AND l.removes IS NOT NULL GROUP BY l.type`,
 		StatLinkSetsByMode: `SELECT CASE WHEN v.links IS NOT NULL THEN '` + LinkSetShared + `' WHEN v.links_base IS NOT NULL THEN '` + LinkSetDelta +
@@ -708,14 +703,6 @@ func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) 
 	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
 }
 
-// sqlCommitImpacts reads the change impacts of the versions a change wrote, in the order of its log (ADR 0174): the
-// columns of commitImpactRow.dest, then the time.
-func (d dialect) sqlCommitImpacts(change domain.ChangeID) (string, []any) {
-	return `SELECT ` + d.cols(su("node_id"), sc("version"), su("change_id"), su("impact_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"),
-		sc("pre_version"), sc("merged_with"), sc("reason"), su("review"), sc("effect"), sc("log_seq"), sc("produced_by"), sc("execution"),
-		su("via"), sc("created_at")) + ` FROM change_impact WHERE change_id = ` + d.ph(1) + ` ORDER BY log_seq, node_id, version`, []any{string(change)}
-}
-
 // logCols is the select list of a log entry.
 func (d dialect) logCols() string {
 	return d.cols(sc("seq"), sc("id"), su("change_id"), sc("type"), sc("flow"), sc("process_id"), sc("execution"), sc("subject"), sc("by_whom"), sc("causation"), sc("at"), sc("payload"))
@@ -806,11 +793,6 @@ func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
 }
 
-// sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment.
-func (d dialect) sqlSetNodeOrigin() string {
-	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
-}
-
 // deleteChangeUsed are the counts that must be zero for a change to be deleted: what it wrote is used by nothing it
 // did not write. The one argument is the change.
 func (d dialect) deleteChangeUsed() []string {
@@ -839,7 +821,6 @@ func (d dialect) deleteChangeRows() []string {
 		`DELETE FROM link WHERE (from_id, from_version) IN ` + mine,
 		`DELETE FROM branch_commit WHERE change_id = ` + p,
 		`DELETE FROM node_version WHERE change_id = ` + p,
-		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
 	}
 }
@@ -847,11 +828,6 @@ func (d dialect) deleteChangeRows() []string {
 // sqlDeleteOrphanNode deletes a node left with no version (one argument: the node).
 func (d dialect) sqlDeleteOrphanNode() string {
 	return `DELETE FROM node WHERE id = ` + d.ph(1) + ` AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = ` + d.ph(1) + `)`
-}
-
-// sqlRefreshLatest sets the latest version of a node to the last it has (one argument: the node).
-func (d dialect) sqlRefreshLatest() string {
-	return `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = ` + d.ph(1) + `) WHERE id = ` + d.ph(1)
 }
 
 // sqlDeleteBranch deletes a branch (arguments namespace, name).
@@ -864,11 +840,30 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility"}
+	nodeColumns        = []string{"id", "namespace", "key", "type", "project", "creator", "creator_unit"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility", "log_seq", "links", "links_base", "links_depth", "links_seq"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	commitColumns      = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq", "fork_commit"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload", "node"}
 )
+
+// nodeArgs are the arguments of a node row, in the order of nodeColumns: what its first version gives it.
+func nodeArgs(n domain.Node) []any {
+	return []any{string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, n.Project.String(), n.Creator.Subject, n.Creator.Unit.String()}
+}
+
+// linkSetArgs are the arguments of how a version holds its links (ADR 0141), the last columns of nodeVersionColumns:
+// links (nil: its own), base (nil: a whole set), depth, order.
+func linkSetArgs(n domain.Node, set LinkSet) []any {
+	var of, base any
+	if set.Of != 0 && set.Of != n.Version {
+		of = int(set.Of)
+	}
+	if set.Base != 0 {
+		base = int(set.Base)
+	}
+	return []any{of, base, set.Depth, set.Seq}
+}
 
 // refsJoin joins the versions refs as the alias a on the columns idCol / verCol: an array pair bound at n and n+1 for
 // PostgreSQL, a JSON list bound at n for SQLite. The join may be repeated with the same arguments.

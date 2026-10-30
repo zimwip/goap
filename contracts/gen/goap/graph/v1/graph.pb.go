@@ -279,7 +279,10 @@ type Node struct {
 	// the person whose edits made the version (attribution, ADR 0161 §3)
 	Editor string `protobuf:"bytes,24,opt,name=editor,proto3" json:"editor,omitempty"`
 	// how far the version is seen, stamped at commit (ADR 0161 §4: personal, private, project, tree, public)
-	Visibility    string `protobuf:"bytes,25,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	Visibility string `protobuf:"bytes,25,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	// the position of the entry of its change's log that committed it (a change commits several times): its view read
+	// there says what made it then (ADR 0174 addendum)
+	LogSeq        int64 `protobuf:"varint,26,opt,name=log_seq,json=logSeq,proto3" json:"log_seq,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -487,6 +490,13 @@ func (x *Node) GetVisibility() string {
 		return x.Visibility
 	}
 	return ""
+}
+
+func (x *Node) GetLogSeq() int64 {
+	if x != nil {
+		return x.LogSeq
+	}
+	return 0
 }
 
 type Link struct {
@@ -21049,7 +21059,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x05 \x01(\tR\x04flow\"3\n" +
 	"\aNodeRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\"\xe3\x05\n" +
+	"\aversion\x18\x02 \x01(\x05R\aversion\"\xfc\x05\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x10\n" +
@@ -21079,7 +21089,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06editor\x18\x18 \x01(\tR\x06editor\x12\x1e\n" +
 	"\n" +
 	"visibility\x18\x19 \x01(\tR\n" +
-	"visibility\"\xe2\x01\n" +
+	"visibility\x12\x17\n" +
+	"\alog_seq\x18\x1a \x01(\x03R\x06logSeq\"\xe2\x01\n" +
 	"\x04Link\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12*\n" +

@@ -208,10 +208,15 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 		}
 		a.taken = map[domain.NodeID]bool{}
 	}
+	// the versions name the entry committing them as they are written: its position is reserved first (ADR 0174
+	// addendum)
+	if a.logSeq, err = tx.ReserveLogSeq(ctx, id); err != nil {
+		return domain.Commit{}, nil, err
+	}
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Commit{}, nil, err
 	}
-	reverted, err := a.revertWithdrawn(own)
+	reverted, revertedFor, err := a.revertWithdrawn(own)
 	if err != nil {
 		return domain.Commit{}, nil, err
 	}
@@ -245,17 +250,18 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 	}
 	// each version the change applied has committed on its own branch; it commits again on the branch it is integrated into
 	// (integrate, commit)
-	committed := make([]domain.ImpactEvent, 0, len(a.cposts))
+	committed := make([]domain.ImpactEvent, 0, len(a.cposts)+len(reverted))
 	for _, cp := range a.cposts {
 		ref, effect := cp.post.Ref(), cp.effect
 		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
 	}
-	// one entry for the commit (ADR 0144)
-	if err := g.emit(ctx, tx, committed...); err != nil {
-		return domain.Commit{}, nil, err
+	// a revert commits for the impact withdrawn (the view holds it no more: the entry names the version, ADR 0174)
+	for i, n := range reverted {
+		ref := n.Ref()
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: revertedFor[i], Op: domain.ImpactCommitted, Committed: &ref, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
 	}
-	// the versions written and the impacts that produced them, pointing at that entry (ADR 0174)
-	if err := g.putCommitImpacts(ctx, tx, c.ID, a.cposts, committed, reverted); err != nil {
+	// one entry for the commit (ADR 0144), at the position its versions name
+	if err := g.emitAt(ctx, tx, a.logSeq, committed...); err != nil {
 		return domain.Commit{}, nil, err
 	}
 	// the change stays open (ADR 0102): it is edited and committed again until it is merged
@@ -285,30 +291,60 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 // revertWithdrawn writes, on the branch of a change, a revert of every node the branch changed that no change impact
 // holds any more (withdrawn after its commit, ADR 0102): a version with the properties and links of the version the
 // branch was forked from (a deletion for a node the fork does not hold), which the branch reads as that version (ADR
-// 0140); it returns the versions it wrote.
-func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, error) {
+// 0140); it returns the versions it wrote and the impact withdrawn each reverts.
+func (a *applier) revertWithdrawn(own domain.Branch) ([]domain.Node, []domain.ChangeImpactID, error) {
 	ids, fork, err := a.g.withdrawnSince(a.ctx, a.tx, a.change)
-	if err != nil {
-		return nil, err
+	if err != nil || len(ids) == 0 {
+		return nil, nil, err
 	}
+	if err := a.loadEvents(); err != nil {
+		return nil, nil, err
+	}
+	withdrawn := withdrawnImpacts(*a.events)
 	var wrote []domain.Node
+	var impacts []domain.ChangeImpactID
 	for _, id := range ids {
 		if !a.takes(id) {
 			continue
 		}
+		cn, ok := withdrawn[id]
+		if !ok {
+			return nil, nil, fmt.Errorf("change %s: node %s is reverted, no impact of it was withdrawn", a.change.ID, id)
+		}
 		v, inFork := fork[id]
-		n, err := a.g.writeRevert(a.ctx, a.tx, a.branch, a.change.ID, id, v, "reverted: its impact was withdrawn from the change")
+		n, err := a.g.writeRevert(a.ctx, a.tx, a.branch, a.change.ID, cn, a.logSeq, id, v, "reverted: its impact was withdrawn from the change")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if inFork {
 			a.target.set(id, v)
 		} else {
 			a.target.remove(id)
 		}
-		wrote = append(wrote, n)
+		wrote, impacts = append(wrote, n), append(impacts, cn)
 	}
-	return wrote, nil
+	return wrote, impacts, nil
+}
+
+// withdrawnImpacts is the last impact withdrawn of each node, from the events of a change: the impact a revert of the
+// node commits for.
+func withdrawnImpacts(events []domain.ImpactEvent) map[domain.NodeID]domain.ChangeImpactID {
+	nodeOf := map[domain.ChangeImpactID]domain.NodeID{}
+	out := map[domain.NodeID]domain.ChangeImpactID{}
+	for _, e := range events {
+		for _, r := range []*domain.NodeRef{e.Committed, e.Post, e.Pre} {
+			if r != nil && r.ID != "" {
+				nodeOf[e.Impact] = r.ID
+				break
+			}
+		}
+		if e.Op == domain.ImpactWithdrawn {
+			if id, ok := nodeOf[e.Impact]; ok {
+				out[id] = e.Impact
+			}
+		}
+	}
+	return out
 }
 
 // advanceBranch moves the head of a branch to a commit built on it (main is created on first use). The head moves only
@@ -358,6 +394,8 @@ type applier struct {
 	target           *stateView
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
+	// logSeq is the position of the log entry committing the versions (Tx.ReserveLogSeq)
+	logSeq int64
 	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),
 	// draft the draft of the node in the state it goes to and drafts the drafts the flow sees (ADR 0079).
 	impact *domain.ChangeImpact

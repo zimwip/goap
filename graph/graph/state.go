@@ -321,7 +321,12 @@ func (t *guardTx) commitOn(ctx context.Context, branch string, change domain.Cha
 	if err != nil {
 		return 0, err
 	}
-	if err := t.Tx.JoinCommits(ctx, branch, change, s, []int64{s}); err != nil {
+	// the commit of the branch's own: the entry committing its versions when one is reserved (a commit of the change)
+	var logSeq int64
+	if t.reserved.change == change {
+		logSeq = t.reserved.seq
+	}
+	if err := t.Tx.JoinCommits(ctx, branch, change, s, logSeq, []int64{s}); err != nil {
 		return 0, err
 	}
 	if t.commit == nil {

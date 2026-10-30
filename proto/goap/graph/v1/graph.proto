@@ -319,6 +319,9 @@ message Node {
   string editor = 24;
   // how far the version is seen, stamped at commit (ADR 0161 §4: personal, private, project, tree, public)
   string visibility = 25;
+  // the position of the entry of its change's log that committed it (a change commits several times): its view read
+  // there says what made it then (ADR 0174 addendum)
+  int64 log_seq = 26;
 }
 
 message Link {

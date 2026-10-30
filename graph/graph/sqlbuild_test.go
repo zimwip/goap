@@ -33,8 +33,8 @@ func checkSQL(t *testing.T, name string, d dialect, got, want string) {
 }
 
 const (
-	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility`
-	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility`
+	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility, v.log_seq`
+	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility, v.log_seq`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect`
@@ -94,7 +94,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		if d.pg {
 			cid = "j.change_id::text"
 		}
-		check("VersionJoins", d, q, a, `SELECT v.version, j.branch, `+cid+` FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{"n1"})
+		check("VersionJoins", d, q, a, `SELECT v.version, j.branch, `+cid+`, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{"n1"})
 	}
 
 	// NodeIDByKey
@@ -280,9 +280,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlLinksInto(refs)
 	check("sqlite LinksInto", lite, q, a, linksInto(liteToCols, `SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?)`), []any{liteRefs})
 	q, a = pg.sqlLatestVersions(ids)
-	check("pg LatestVersions", pg, q, a, `SELECT id::text, latest FROM node WHERE id = ANY($1::uuid[])`, []any{[]string{"n1", "n2"}})
+	check("pg LatestVersions", pg, q, a, `SELECT node_id::text, max(version) FROM node_version WHERE node_id = ANY($1::uuid[]) GROUP BY node_id`, []any{[]string{"n1", "n2"}})
 	q, a = lite.sqlLatestVersions(ids)
-	check("sqlite LatestVersions", lite, q, a, `SELECT id, latest FROM node WHERE id IN (SELECT value FROM json_each(?))`, []any{`["n1","n2"]`})
+	check("sqlite LatestVersions", lite, q, a, `SELECT node_id, max(version) FROM node_version WHERE node_id IN (SELECT value FROM json_each(?)) GROUP BY node_id`, []any{`["n1","n2"]`})
 	q, a = pg.sqlLatestVersionsOn(ids, "b")
 	check("pg LatestVersionsOn", pg, q, a, `SELECT id::text, version FROM (SELECT q.id, (SELECT v.version FROM node_version v WHERE v.node_id = q.id AND v.committed BETWEEN (SELECT min(k.seq) FROM branch_commit k WHERE k.branch = $2) AND (SELECT max(k.seq) FROM branch_commit k WHERE k.branch = $2) AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = $2 AND j.seq = v.committed OFFSET 0) ORDER BY v.committed DESC, v.version DESC LIMIT 1) AS version FROM unnest($1::uuid[]) AS q(id)) l WHERE version IS NOT NULL`, []any{[]string{"n1", "n2"}, "b"})
 	q, a = lite.sqlLatestVersionsOn(ids, "b")
@@ -358,12 +358,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 
 	// Change impacts (ADR 0174)
-	q, a = pg.sqlCommitImpacts("c1")
-	check("pg CommitImpacts", pg, q, a, `SELECT node_id::text, version, change_id::text, impact_id::text, key, type, intent, rationale, pre_version, merged_with, reason, review::text, effect, log_seq, produced_by, execution, via::text, created_at
-			FROM change_impact WHERE change_id = $1 ORDER BY log_seq, node_id, version`, []any{"c1"})
-	q, a = lite.sqlCommitImpacts("c1")
-	check("sqlite CommitImpacts", lite, q, a, `SELECT node_id, version, change_id, impact_id, key, type, intent, rationale, pre_version, merged_with, reason, review, effect, log_seq, produced_by, execution, via, created_at
-			FROM change_impact WHERE change_id = ? ORDER BY log_seq, node_id, version`, []any{"c1"})
 	q, a = pg.sqlNodeChangePage("n1", 0, 3)
 	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_log WHERE node = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
 	q, a = lite.sqlNodeChangePage("n1", 9, 3)
@@ -404,12 +398,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg DeleteTag", pg, q, `DELETE FROM tag WHERE id = $1`)
 	q, _ = lite.sqlDeleteTag("t1")
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
-	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
-	q, _ = pg.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
-	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`)
-	q, _ = lite.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
-	checkSQL(t, "sqlite JoinCommits", lite, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`)
+	q, _ = pg.sqlJoinCommits("main", "c1", 9, 12, []int64{3, 4})
+	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`)
+	q, _ = lite.sqlJoinCommits("main", "c1", 9, 12, []int64{3, 4})
+	checkSQL(t, "sqlite JoinCommits", lite, q, `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ?1, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`)
 
 	// Inserts
 	nodeVersionCols := []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner"}
@@ -458,7 +450,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM branch_commit WHERE change_id = $1`,
 		`DELETE FROM node_version WHERE change_id = $1`,
-		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
@@ -467,13 +458,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM link WHERE (from_id, from_version) IN (SELECT node_id, version FROM node_version WHERE change_id = ?1)`,
 		`DELETE FROM branch_commit WHERE change_id = ?1`,
 		`DELETE FROM node_version WHERE change_id = ?1`,
-		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
 	})
 	checkSQL(t, "pg orphan", pg, pg.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`)
 	checkSQL(t, "sqlite orphan", lite, lite.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = ?1)`)
-	checkSQL(t, "pg latest", pg, pg.sqlRefreshLatest(), `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = $1) WHERE id = $1`)
-	checkSQL(t, "sqlite latest", lite, lite.sqlRefreshLatest(), `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = ?1) WHERE id = ?1`)
 	checkSQL(t, "pg branch delete", pg, pg.sqlDeleteBranch(), `DELETE FROM branch WHERE namespace = $1 AND name = $2`)
 	checkSQL(t, "sqlite branch delete", lite, lite.sqlDeleteBranch(), `DELETE FROM branch WHERE namespace = ? AND name = ?`)
 	checkSQL(t, "pg change delete", pg, pg.sqlDeleteChange(), `DELETE FROM change WHERE id = $1`)

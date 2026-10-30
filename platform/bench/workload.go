@@ -57,6 +57,9 @@ type Config struct {
 	// NodeCheckout checks the modified nodes of a lifecycle change out one call each, rather than all in one
 	// (ImpactNodeCheckout naming them all)
 	NodeCheckout bool
+	// Writers edits a lifecycle change from that many concurrent writers, the edits dealt between them (several
+	// people working on one change); 1: one writer
+	Writers int
 	// The run stops at the first of: TargetVersions versions written, Duration elapsed, MaxChanges changes (0: no bound).
 	TargetVersions int64
 	Duration       time.Duration
@@ -78,6 +81,7 @@ func (c *Config) Defaults() {
 	}
 	c.Workers = max(c.Workers, 1)
 	c.Edits = max(c.Edits, 1)
+	c.Writers = max(c.Writers, 1)
 	c.Spread = min(max(c.Spread, 0), 1)
 	if c.Mode == "" {
 		c.Mode = ModeCommit
@@ -632,62 +636,28 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 			}
 		}
 	}
-	impacts := make([]string, 0, len(edits))
-	for i := range edits {
-		e := &edits[i]
-		if e.create {
-			var links []*graphv1.NodeLinkWrite
-			for _, to := range e.links {
-				if to.id != "" {
-					links = append(links, &graphv1.NodeLinkWrite{Type: LinkType, To: &graphv1.NodeRef{Id: to.id, Version: to.version}})
+	// the edits, dealt between the writers working on the change at once
+	impacts := make([]string, len(edits))
+	writers := min(r.Config.Writers, len(edits))
+	errs := make([]error, writers)
+	var wg sync.WaitGroup
+	for k := range writers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := k; i < len(edits); i += writers {
+				imp, err := r.edit(ctx, id, &edits[i], checked)
+				if err != nil {
+					errs[k] = err
+					return
 				}
+				impacts[i] = imp
 			}
-			res, err := timed(ctx, m, "ImpactNodeCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCreateResponse], error) {
-				return g.ImpactNodeCreate(ctx, connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: id, Key: e.n.key, Type: e.n.typ, Props: structOf(e.props), Links: links, Rationale: "bench: created"}))
-			})
-			if err != nil {
-				return abandon(err)
-			}
-			impacts = append(impacts, res.Msg.Node.GetId())
-			continue
-		}
-		imp, ok := checked[e.n.id]
-		if !ok {
-			res, err := shaped(ctx, m, "ImpactNodeCheckout", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
-				return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id,
-					Nodes: []*graphv1.NodeCheckoutSpec{{NodeId: e.n.id, Rationale: "bench: modified"}}}))
-			})
-			if err != nil {
-				return abandon(err)
-			}
-			imp = res.Msg.Nodes[0].GetId()
-		}
-		if _, err := shaped(ctx, m, "ImpactNodeUpdate", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
-			return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))
-		}); err != nil {
-			return abandon(err)
-		}
-		if e.drop {
-			link, err := r.dropped(ctx, e, &graphv1.NodeRef{Id: e.n.id}, &graphv1.View{ChangeId: id})
-			if err != nil {
-				return abandon(err)
-			}
-			if link != "" {
-				if _, err := timed(ctx, m, "ImpactLinkDelete", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkDeleteResponse], error) {
-					return g.ImpactLinkDelete(ctx, connect.NewRequest(&graphv1.ImpactLinkDeleteRequest{ChangeId: id, LinkId: link}))
-				}); err != nil {
-					return abandon(err)
-				}
-			}
-		}
-		for _, to := range e.links {
-			if _, err := timed(ctx, m, "ImpactLinkCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkCreateResponse], error) {
-				return g.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: id, ChangeImpactId: imp, Type: LinkType, To: &graphv1.NodeRef{Id: to.id, Version: to.version}}))
-			}); err != nil {
-				return abandon(err)
-			}
-		}
-		impacts = append(impacts, imp)
+		}()
+	}
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return abandon(err)
 	}
 	// one review of the change, as the web submits one (ADR 0080, 0144)
 	verdicts := make([]*graphv1.ImpactVerdict, len(impacts))
@@ -711,6 +681,63 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 		return err // committed: it stays, as a change waiting for its merge
 	}
 	return nil
+}
+
+// edit makes one edit of a lifecycle change: the node created, else checked out (unless it is already) and edited.
+func (r *Runner) edit(ctx context.Context, id string, e *edit, checked map[string]string) (string, error) {
+	g, m := r.Clients.Graph, r.Metrics
+	if e.create {
+		var links []*graphv1.NodeLinkWrite
+		for _, to := range e.links {
+			if to.id != "" {
+				links = append(links, &graphv1.NodeLinkWrite{Type: LinkType, To: &graphv1.NodeRef{Id: to.id, Version: to.version}})
+			}
+		}
+		res, err := timed(ctx, m, "ImpactNodeCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCreateResponse], error) {
+			return g.ImpactNodeCreate(ctx, connect.NewRequest(&graphv1.ImpactNodeCreateRequest{ChangeId: id, Key: e.n.key, Type: e.n.typ, Props: structOf(e.props), Links: links, Rationale: "bench: created"}))
+		})
+		if err != nil {
+			return "", err
+		}
+		return res.Msg.Node.GetId(), nil
+	}
+	imp, ok := checked[e.n.id]
+	if !ok {
+		res, err := shaped(ctx, m, "ImpactNodeCheckout", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeCheckoutResponse], error) {
+			return g.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: id,
+				Nodes: []*graphv1.NodeCheckoutSpec{{NodeId: e.n.id, Rationale: "bench: modified"}}}))
+		})
+		if err != nil {
+			return "", err
+		}
+		imp = res.Msg.Nodes[0].GetId()
+	}
+	if _, err := shaped(ctx, m, "ImpactNodeUpdate", len(e.n.out), func(ctx context.Context) (*connect.Response[graphv1.ImpactNodeUpdateResponse], error) {
+		return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))
+	}); err != nil {
+		return "", err
+	}
+	if e.drop {
+		link, err := r.dropped(ctx, e, &graphv1.NodeRef{Id: e.n.id}, &graphv1.View{ChangeId: id})
+		if err != nil {
+			return "", err
+		}
+		if link != "" {
+			if _, err := timed(ctx, m, "ImpactLinkDelete", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkDeleteResponse], error) {
+				return g.ImpactLinkDelete(ctx, connect.NewRequest(&graphv1.ImpactLinkDeleteRequest{ChangeId: id, LinkId: link}))
+			}); err != nil {
+				return "", err
+			}
+		}
+	}
+	for _, to := range e.links {
+		if _, err := timed(ctx, m, "ImpactLinkCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkCreateResponse], error) {
+			return g.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: id, ChangeImpactId: imp, Type: LinkType, To: &graphv1.NodeRef{Id: to.id, Version: to.version}}))
+		}); err != nil {
+			return "", err
+		}
+	}
+	return imp, nil
 }
 
 // probe measures the reads of a client against the growing graph, every ProbeEvery.

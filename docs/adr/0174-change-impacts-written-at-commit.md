@@ -86,3 +86,60 @@ where to where, and why.
 - "What did this change do to this node, from which version to which, and which entry recorded it" is one row.
 - A change that commits nothing leaves no impact outside its log: `PurgeChange` deletes the log and nothing else.
 - Whatever read an open change's impacts from the table reads the view (folded once, kept by the cache of views).
+
+## Addendum: the version is the record
+
+Once every path writing a version wrote its row with it, the row and the version were one to one: the row repeated the
+key of the version, its node, its change, its reason, its execution, its time and its parents, and what it held of its
+own (intent, rationale, the review that let it commit, the effect, the producer, `via`, the entry of the log) is in the
+log of the change, folded into its view. The only reader of the table in the services listed the nodes a change wrote,
+which the versions answer by their change (`node_version_change`).
+
+The table goes (migration `0030_no_change_impact`, both dialects; `CommitImpact`, `Tx.PutCommitImpacts` /
+`CommitImpacts` with it). A version names its change (`node_version.change_id`) and its impact
+(`node_version.change_impact`); what made it is read in the view of its change, by that impact: its reviews, the
+`committed` event that names the version and its effect over the impact's pre (ADR 0173). The bootstrap, which logs
+nothing, keeps its intent as the comment of its versions. `Tx.ChangeNodeIDs` lists the nodes a change wrote versions
+of (the difference of two baselines). The effect of a version over the one it was checked out from, which only the row
+kept, is no longer computed at commit (two reads per node committed again). The tests check the view instead
+(`checkVersionImpacts`: a version naming an impact names one of its change's log, the version a committed event of the
+change names on its own branch names that event's impact). A commit writes the versions and their links only.
+
+A change commits several times (ADR 0102): an impact may write a version at each commit, so the impact alone does not
+say which of its commits wrote a version. A version names the entry of its change's log that committed it
+(`node_version.log_seq`, migration `0031_node_version_log_seq`, both dialects; `Node.LogSeq`, proto `Node.log_seq`):
+the view of the change read at that position says what made it then (intent, rationale, review). The entry is known
+before the versions: the commit reserves its position first (`Tx.ReserveLogSeq`: on PostgreSQL the position the lock
+of the change read ahead, else one of the sequence; on SQLite and in memory the next one, the writer being alone), writes
+the versions naming it, then appends the entry at that position (`Graph.emitAt`, `AppendLog` with `Seq` set): no
+`UPDATE` of a version. The guard holds it so (`guardTx.reserved`): one reservation at a time, nothing else appended
+until the entry takes it, every version of that change written meanwhile naming it, none naming a position not
+reserved, no reservation left at the end of the transaction. The commit of a change, a merge (its versions written
+once its impacts are declared and reviewed, before the entry of its commit) and the reverts written again over a moved
+fork (`refreshReverts`, the entry of the `rebase` commit) all write so.
+
+No version is rewritten when a branch takes it (by default nothing is updated): `SetNodeOrigin` is gone. A version keeps
+the change, the impact and the entry that wrote it, a sub-change's version taken by its parent included; the merge of
+a three-way merge keeps the merge change that wrote it. The integration is the row of `branch_commit` (migration
+`0032_branch_commit_log_seq`, both dialects): `change_id` the change whose merge made the branch take the commit,
+`log_seq` the entry of that change's log recording it (`Tx.JoinCommits(..., logSeq, ...)`; a fast-forward reserves the
+position of the committed entry of the change before it takes the commits, the reverts it carries named by it too; a
+three-way merge, its merge change's committed entry; a commit of the branch's own, the entry committing its versions;
+none for a move of a fork), read with the version by `Tx.VersionJoins` (`domain.VersionJoin.LogSeq`). The guard
+accepts a position reserved or appended by the transaction only. A revert
+commits for the impact withdrawn (`withdrawnImpacts`: the last withdrawn impact of the node, from the log; written
+again, the impact of the revert it replaces): it names it and the `committed` entry of its commit names the revert,
+which the view of the change, holding the impact no more, leaves aside. `checkVersionImpacts` checks that every version
+of a change names an impact and an entry of its change committing it (the bootstrap's roots aside).
+
+A version is written whole, at once: how it holds its links (ADR 0141: `links`, `links_base`, `links_depth`,
+`links_seq`) is planned before it is written (`Graph.planLinks`, reading only the earlier versions of the node) and
+given with it (`Tx.PutNode(ctx, n, LinkSet)`; `Graph.putVersion` plans, writes the version, then the rows of its set,
+`writeLinks`); there is no `PutLinkSet`, no `UPDATE` of `node_version` on any store. A commit numbers its versions
+first, then writes each with its links once those are resolved to the numbers; a merge plans the links of its versions
+before writing them. The node keeps no latest version (`node.latest` dropped, migration `0033_no_node_latest`, both
+dialects): it was the counter of the numbers of a node's versions across branches, not a head; the greatest version is
+read on the key of `node_version` (`Tx.LatestVersions`, `max(version)`), and two writers giving a node the same next
+version meet on that key (`ErrConflict`), as they met on the compare-and-set of the counter before. The `node` row is
+inserted with the first version and never written again: what it holds (key, type, project, creator) is the node's
+for good.

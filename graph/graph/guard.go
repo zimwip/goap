@@ -51,9 +51,6 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		r.g.forgetSelections()
 	}
 	if err == nil {
-		for ref := range gt.origins {
-			r.g.versions.forgetNode(ref)
-		}
 		// the heads kept of the branches it moved move with it, the nodes of the keys it created known (heads.go)
 		for k, id := range gt.newKeys {
 			r.g.keyIDs.Put(k, id)
@@ -76,11 +73,11 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 			r.g.foundRefs.Put(k, true)
 		}
 		// the versions it wrote and read back are what is stored now that it committed: kept for the next readers (a
-		// link to one checks its type), but one whose origin it set
+		// link to one checks its type)
 		if len(gt.written) > 0 && !gt.purged {
 			gen := r.g.versions.generation()
 			for ref, n := range gt.nodes {
-				if gt.written[ref] && !gt.origins[ref] {
+				if gt.written[ref] {
 					kept := copyNode(n)
 					r.g.versions.update(gen, ref, func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
 				}
@@ -137,10 +134,11 @@ type guardTx struct {
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
 	written map[domain.NodeRef]bool
+	// reserved is the position of the log entry committing the versions being written (ReserveLogSeq): the next entry
+	// the transaction appends, of that change, and the one every version of that change written meanwhile names
+	reserved logPos
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
-	// origins are the versions whose origin the transaction set: read again by the next ones once it commits
-	origins map[domain.NodeRef]bool
 	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
 	// a node it writes or joins a version of (versioncache.go)
 	latestOn map[string]map[domain.NodeID]domain.Version
@@ -321,16 +319,6 @@ func (t *guardTx) lock(key string) {
 	t.branches = nil // what the writers the lock held off changed is read again
 }
 
-// PutCommitImpacts writes the change impacts of versions a change wrote (ADR 0174): each names an existing change.
-func (t *guardTx) PutCommitImpacts(ctx context.Context, rows []CommitImpact) error {
-	for _, r := range rows {
-		if err := t.needChange(r.Change, "change impact of "+r.Key); err != nil {
-			return err
-		}
-	}
-	return t.Tx.PutCommitImpacts(ctx, rows)
-}
-
 // Change reads a change: its header once per transaction, its change impacts and items from the fold of its log (ADR
 // 0153; the store keeps no impact before its commit, ADR 0174), so that an operation on a change of N impacts decodes
 // none of them.
@@ -436,6 +424,43 @@ func (t *guardTx) knowHeads(cs []domain.Change) {
 	}
 }
 
+// logPos is a position in the log of a change.
+type logPos struct {
+	change domain.ChangeID
+	seq    int64
+}
+
+// ReserveLogSeq reserves the position of the entry committing the versions written next (ADR 0174 addendum): they
+// name it as they are written, the entry appended after them takes it, and nothing else is appended meanwhile.
+func (t *guardTx) ReserveLogSeq(ctx context.Context, change domain.ChangeID) (int64, error) {
+	if t.reserved.seq != 0 {
+		return 0, fmt.Errorf("change %s: a log position is reserved already for change %s", change, t.reserved.change)
+	}
+	if err := t.LockChange(ctx, change); err != nil {
+		return 0, err
+	}
+	seq, err := t.Tx.ReserveLogSeq(ctx, change)
+	if err != nil {
+		return 0, err
+	}
+	t.reserved = logPos{change, seq}
+	return seq, nil
+}
+
+// committing checks the position of the log entry a version of a change names: the one reserved, and while one is,
+// every version of that change names it.
+func (t *guardTx) committing(what string, change domain.ChangeID, seq int64) error {
+	switch {
+	case seq == 0 && t.reserved.change != change:
+		return nil
+	case seq == 0 || t.reserved.seq == 0:
+		return fmt.Errorf("%s: names log entry %d of change %s, %d is reserved (change %q): the entry committing a version is reserved before it is written: %w", what, seq, change, t.reserved.seq, t.reserved.change, ErrInvalid)
+	case seq != t.reserved.seq || change != t.reserved.change:
+		return fmt.Errorf("%s: names log entry %d of change %s, %d of %s is reserved: %w", what, seq, change, t.reserved.seq, t.reserved.change, ErrInvalid)
+	}
+	return nil
+}
+
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	if err := t.beforeAppend(ctx, e); err != nil {
 		return e, err
@@ -449,6 +474,9 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 
 // AppendLogs appends entries in their order, in one statement when the store can (logBatcher).
 func (t *guardTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	if t.reserved.seq != 0 && len(entries) > 1 {
+		return nil, fmt.Errorf("change %s: log entries appended while position %d is reserved", t.reserved.change, t.reserved.seq)
+	}
 	for _, e := range entries {
 		if err := t.beforeAppend(ctx, e); err != nil {
 			return nil, err
@@ -465,6 +493,9 @@ func (t *guardTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]
 }
 
 func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
+	if e.Seq != t.reserved.seq || (e.Seq != 0 && e.Change != t.reserved.change) {
+		return fmt.Errorf("log entry %s of change %s at %d: position %d of change %q is reserved: %w", e.Type, e.Change, e.Seq, t.reserved.seq, t.reserved.change, ErrInvalid)
+	}
 	if err := t.LockChange(ctx, e.Change); err != nil {
 		return err
 	}
@@ -479,6 +510,9 @@ func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
 }
 
 func (t *guardTx) afterAppend(e domain.LogEntry) {
+	if e.Seq == t.reserved.seq {
+		t.reserved = logPos{}
+	}
 	if t.appended == nil {
 		t.appended = map[domain.ChangeID]int64{}
 	}
@@ -578,10 +612,19 @@ func (t *guardTx) change(ctx context.Context, id domain.ChangeID) (domain.Change
 	return c, nil
 }
 
-func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
+func (t *guardTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
 	what := "node " + n.Key + " v" + fmt.Sprint(n.Version)
 	if err := t.needChange(n.ChangeID, what); err != nil {
 		return err
+	}
+	// how it holds its links: over versions of the same node written before it (ADR 0141)
+	for _, v := range []domain.Version{links.Of, links.Base} {
+		if v >= n.Version {
+			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", n.Ref(), v, ErrInvalid)
+		}
+	}
+	if links.Of != 0 && links.Base != 0 {
+		return fmt.Errorf("the links of version %s: a version shares a set or writes a delta, not both: %w", n.Ref(), ErrInvalid)
 	}
 	t.forgetLatest(n.ID)
 	delete(t.keys, nsKey(n.Namespace, n.Key))
@@ -654,6 +697,9 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Responsible] = what
 	t.projects[n.Project] = what
+	if err := t.committing(what, n.ChangeID, n.LogSeq); err != nil {
+		return err
+	}
 	if n.Committed >= 0 { // a negative order commits the version in no commit (a test fixture)
 		committed, err := t.commitOn(ctx, n.Branch, n.ChangeID)
 		if err != nil {
@@ -661,7 +707,7 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 		}
 		n.Committed = committed
 	}
-	if err := t.Tx.PutNode(ctx, n); err != nil {
+	if err := t.Tx.PutNode(ctx, n, links); err != nil {
 		return err
 	}
 	if n.Version == 1 {
@@ -708,47 +754,19 @@ func (t *guardTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.
 	return t.Tx.DropLink(ctx, from, row, l)
 }
 
-// PutLinkSet sets how a version written in the transaction holds its links, over versions of the same node written
-// before it (ADR 0141).
-func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
-	if !t.written[from] {
-		return fmt.Errorf("the links of version %s: it is not written by this transaction, a version never changes (ADR 0079): %w", from, ErrConflict)
-	}
-	delete(t.wroteLinks, from)
-	for _, v := range []domain.Version{set.Of, set.Base} {
-		if v >= from.Version {
-			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", from, v, ErrInvalid)
-		}
-	}
-	if set.Of != 0 && set.Base != 0 {
-		return fmt.Errorf("the links of version %s: a version shares a set or writes a delta, not both: %w", from, ErrInvalid)
-	}
-	return t.Tx.PutLinkSet(ctx, from, set)
-}
-
-func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	if err := t.needChange(change, "the origin of node "+ref.String()); err != nil {
-		return err
-	}
-	delete(t.nodes, ref)
-	if t.origins == nil {
-		t.origins = map[domain.NodeRef]bool{}
-	}
-	t.origins[ref] = true
-	t.g.versions.forgetNode(ref)
-	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
-}
-
-// JoinCommits makes a branch take commits (ADR 0176), from the order of the commit being written on it.
-func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, _ int64, seqs []int64) error {
+// logSeq is the entry of the change's log recording the merge: the one reserved, or one the transaction appended.
+func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, _, logSeq int64, seqs []int64) error {
 	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
 		return err
+	}
+	if logSeq != 0 && !(t.reserved.change == change && t.reserved.seq == logSeq) && (logSeq > t.appended[change] || t.appended[change] == 0) {
+		return fmt.Errorf("the commits %s takes: log entry %d of change %s is neither reserved nor appended by the transaction: %w", branch, logSeq, change, ErrInvalid)
 	}
 	at, err := t.commitOn(ctx, branch, change)
 	if err != nil {
 		return err
 	}
-	return t.Tx.JoinCommits(ctx, branch, change, at, seqs)
+	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }
 
 // took notes a version a branch holds once it took the commits of another branch (takeCommits): what is kept of the
@@ -830,6 +848,9 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 // verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist, and
 // that every version it committed is in a commit.
 func (t *guardTx) verify(ctx context.Context) error {
+	if t.reserved.seq != 0 {
+		return fmt.Errorf("change %s: log position %d reserved for versions no entry committed", t.reserved.change, t.reserved.seq)
+	}
 	for branch := range t.commit {
 		return fmt.Errorf("versions committed on branch %s in no commit: a version is written when its change commits (ADR 0079, 0140): %w", branch, ErrInvalid)
 	}

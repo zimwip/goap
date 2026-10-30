@@ -305,8 +305,8 @@ func (t *observedTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) 
 	return out, nil
 }
 
-func (t *observedTx) PutNode(ctx context.Context, n domain.Node) error {
-	if err := t.Tx.PutNode(ctx, n); err != nil {
+func (t *observedTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
+	if err := t.Tx.PutNode(ctx, n, links); err != nil {
 		return err
 	}
 	t.nodes = append(t.nodes, n.Ref())

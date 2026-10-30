@@ -76,7 +76,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	c.Status = domain.ChangeApplied
 	c.LandedCommit = res.Commit.ID
-	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Commit.ID, nil, nil); err != nil {
+	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Commit.ID, nil, nil, 0, nil); err != nil {
 		return c, err
 	}
 	g.raiseMerged(ctx, tx, c, own.Parent, &res.Commit, res.merged)
@@ -265,39 +265,52 @@ var errTargetMoved = errors.New("the target moved since it was read")
 // commits as the version it wrote. The target is a lasting branch, which records the commit in a commit, or the branch
 // of the parent change of a sub-change (ADR 0103), which holds no commit (ADR 0140).
 //
-// Everything is read and the fork moved before the target is locked, against the head read then, read again while the
-// head moves before the lock (prepareAttempts): the lock is held for the writes of the target only. A head moved still
-// is read again under the lock: a target moved on a node the branch changed is errTargetMoved, for the caller to rebase;
-// a target that holds the lock already (the caller took it) cannot have moved. False with no error: not a
-// fast-forward, the target locked.
+// Everything is read before the target is locked, against the head read then, read again while the head moves before
+// the lock (prepareAttempts) with no write, so the fork is moved once, onto the head the plan stands on: the lock is
+// held for the writes of the target only. A head moved still is read again under the lock (the fork moved again): a
+// target moved on a node the branch changed is errTargetMoved, for the caller to rebase; a target that holds the lock
+// already (the caller took it) cannot have moved. False with no error: not a fast-forward, the target locked.
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, closing bool) (bool, error) {
-	ff, err := g.prepareFastForward(ctx, tx, c, own)
-	// a target moved while the plan was read is read again before the lock, so the lock is taken on a plan that stands
-	for i := 0; err == nil && i < prepareAttempts; i++ {
-		now, ferr := freshOnto(ctx, tx, ff.own)
+	ck, err := g.checkFastForward(ctx, tx, c, own)
+	// a target moved while the plan was read is read again before anything is written, so the fork moves once, onto a
+	// head that stands
+	for i := 0; err == nil && ck.ok && i < prepareAttempts; i++ {
+		now, ferr := freshOnto(ctx, tx, own)
 		if ferr != nil {
 			return false, ferr
 		}
-		if now.head == ff.to.head {
+		if now.head == ck.to.head {
 			break
 		}
-		ff, err = g.prepareFastForward(ctx, tx, ff.c, ff.own)
+		ck, err = g.checkFastForward(ctx, tx, c, own)
 	}
 	if err != nil {
 		return false, err
+	}
+	var ff fastForwardPlan
+	if ck.ok {
+		if ff, err = g.finishFastForward(ctx, tx, ck); err != nil {
+			return false, err
+		}
 	}
 	// the head of the target is read again under its lock (ADR 0127): a merge meanwhile is seen, and the plan read again
 	// with the target still; a node the target moved on meanwhile is the caller's to rebase, under the lock
 	if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
 		return false, err
 	}
-	if now, err := ontoOf(ctx, tx, ff.own); err != nil {
+	if now, err := ontoOf(ctx, tx, own); err != nil {
 		return false, err
-	} else if now.head != ff.to.head {
-		if ff, err = g.prepareFastForward(ctx, tx, ff.c, ff.own); err != nil {
+	} else if now.head != ck.to.head {
+		if ff.ok {
+			c, own = ff.c, ff.own
+		}
+		if ck, err = g.checkFastForward(ctx, tx, c, own); err != nil {
 			return false, err
-		} else if !ff.ok {
+		} else if !ck.ok {
 			return false, errTargetMoved
+		}
+		if ff, err = g.finishFastForward(ctx, tx, ck); err != nil {
+			return false, err
 		}
 	}
 	if !ff.ok {
@@ -330,36 +343,48 @@ type fastForwardPlan struct {
 	heads map[domain.NodeID]domain.Node
 }
 
-// prepareFastForward reads what a fast-forward writes, against the head of the target as it reads it; a target moved on
-// a node the branch changed is no fast-forward (ok false), a target moved on other nodes moves the fork of the branch
-// onto its head (the branch is the change's, under the lock of its tree).
-func (g *Graph) prepareFastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (fastForwardPlan, error) {
-	ff := fastForwardPlan{c: c, own: own}
+// fastForwardCheck is what a fast-forward reads, writing nothing, against the head of its target as it reads it: ok
+// when the target moved on no node the branch changed, the target moved since the fork (moved) and the versions of
+// the nodes the branch holds on its fork, on its branch and on the target.
+type fastForwardCheck struct {
+	ok, moved            bool
+	c                    domain.Change
+	own                  domain.Branch
+	to                   onto
+	ids                  []domain.NodeID
+	intoNodes, fromNodes map[domain.NodeID]domain.Version
+	raw                  map[domain.NodeID]CommittedVersion
+}
+
+// checkFastForward reads whether a change fast-forwards onto the head of its target as it reads it (a target moved on
+// a node the branch changed is no fast-forward, ok false), writing nothing.
+func (g *Graph) checkFastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (fastForwardCheck, error) {
+	ck := fastForwardCheck{c: c, own: own}
 	to, err := freshOnto(ctx, tx, own)
 	if err != nil {
-		return ff, err
+		return ck, err
 	}
-	ff.to = to
+	ck.to = to
 	// what the branch changed since its fork joins the target: the versions the branch holds now (a rejected or
 	// replaced version stays behind, a revert gives the fork's), and the tombstones of the nodes it retired; only a node
 	// the branch holds a version of can differ, the states are read for those (ADR 0137)
 	ids, err := tx.BranchNodeIDs(ctx, own.Name)
 	if err != nil {
-		return ff, err
+		return ck, err
 	}
 	slices.Sort(ids)
 	forkNodes, err := forkVersions(ctx, tx, own, ids)
 	if err != nil {
-		return ff, err
+		return ck, err
 	}
 	intoNodes, err := to.versions(ctx, tx, ids)
 	if err != nil {
-		return ff, err
+		return ck, err
 	}
 	// the commits the branch holds, read once: its state over the fork, and the reverts the target takes
 	raw, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, ids)
 	if err != nil {
-		return ff, err
+		return ck, err
 	}
 	fromNodes := overFork(forkNodes, raw)
 	// a node the branch holds as its fork does (a revert, ADR 0140) is no work of the branch: the target's version stands
@@ -373,18 +398,30 @@ func (g *Graph) prepareFastForward(ctx context.Context, tx Tx, c domain.Change, 
 		// the target moved on a node the branch changed: a fast-forward still when the branch's version derives from the
 		// target's (a draft rebased at its commit, ADR 0165), a merge otherwise
 		if ok, err := overTarget(ctx, tx, worked, forkNodes, intoNodes, fromNodes); err != nil || !ok {
-			return ff, err
+			return ck, err
 		}
 	}
-	if moved, err := to.moved(ctx, tx, own); err != nil {
-		return ff, err
-	} else if moved {
-		// the target moved since the fork, on other nodes: the work of the branch stands over it as it is, the rebase
-		// that would only move the fork left out (ADR 0140)
+	if ck.moved, err = to.moved(ctx, tx, own); err != nil {
+		return ck, err
+	}
+	ck.ok, ck.ids, ck.intoNodes, ck.fromNodes, ck.raw = true, ids, intoNodes, fromNodes, raw
+	return ck, nil
+}
+
+// finishFastForward prepares what a fast-forward checked writes: the fork of the branch moved onto the head checked
+// when the target moved since the fork, on other nodes (the branch is the change's, under the lock of its tree), the
+// versions the target takes and those nodes as it holds them once it took them.
+func (g *Graph) finishFastForward(ctx context.Context, tx Tx, ck fastForwardCheck) (fastForwardPlan, error) {
+	c, own, to, ids, intoNodes, fromNodes, raw := ck.c, ck.own, ck.to, ck.ids, ck.intoNodes, ck.fromNodes, ck.raw
+	ff := fastForwardPlan{c: c, own: own, to: to}
+	if ck.moved {
+		// the work of the branch stands over the target as it is, the rebase that would only move the fork left out
+		// (ADR 0140)
 		if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
 			return ff, err
 		}
 		g.raiseRebased(ctx, tx, c.ID, own.Name, nil)
+		var err error
 		if c, err = tx.Change(ctx, c.ID); err != nil {
 			return ff, err
 		}
@@ -471,8 +508,13 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 			return true, g.closeMerged(ctx, tx, c, own, target)
 		}
 	}
-	// the target takes the commits of the branch (ADR 0176): one row per commit, the versions they wrote as they are
-	if err := takeCommits(ctx, tx, own.Namespace, target, own.Name, c.ID, moves); err != nil {
+	// the target takes the commits of the branch (ADR 0176): one row per commit, the versions they wrote as they are,
+	// recorded by the committed entry of the change, its position reserved first
+	seq, err := tx.ReserveLogSeq(ctx, c.ID)
+	if err != nil {
+		return false, err
+	}
+	if err := takeCommits(ctx, tx, own.Namespace, target, own.Name, c.ID, seq, moves); err != nil {
 		return false, err
 	}
 	// the impacts whose node this merge moves record their version on the target, the ones merged before kept
@@ -489,7 +531,7 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 	}
 	if to.parent.Ephemeral {
 		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
-		if err := g.commit(ctx, tx, c, own, c.ID, "", only, nil); err != nil {
+		if err := g.commit(ctx, tx, c, own, c.ID, "", only, nil, seq, moves); err != nil {
 			return false, err
 		}
 		// the parent's branch records the merge as a commit of its own (ADR 0175)
@@ -519,7 +561,7 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 		return false, err
 	}
 	c.LandedCommit = res.ID
-	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only, ff.heads); err != nil {
+	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only, ff.heads, seq, moves); err != nil {
 		return false, err
 	}
 	if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {
