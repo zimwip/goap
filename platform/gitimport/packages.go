@@ -10,8 +10,8 @@ import (
 // pkgRef is a package: of the repository (the files of a directory, a declared Java package) or one it imports from
 // outside.
 type pkgRef struct {
-	// lang is the language family (go, python, java, js, c, rust): C and C++ share their packages, so do JavaScript
-	// and TypeScript.
+	// lang is the language family (go, python, java, js, c, rust): C and C++ share their packages, so do JavaScript,
+	// TypeScript and the Vue and Svelte components.
 	lang string
 	// path is its import path (Go), dotted path (Python, Java), directory or npm package (JavaScript), directory or
 	// header (C), directory or crate (Rust).
@@ -25,7 +25,7 @@ func family(lang string) string {
 	switch lang {
 	case "cpp":
 		return "c"
-	case "javascript", "typescript", "tsx":
+	case "javascript", "typescript", "tsx", "vue", "svelte":
 		return "js"
 	}
 	return lang
@@ -197,7 +197,7 @@ func (l layout) resolve(lang, p string, im Import) (resolved, bool) {
 			r.alias = "." // a package's classes
 		}
 		return in(strings.Join(parts[:i], "."), "")
-	case "javascript", "typescript", "tsx":
+	case "javascript", "typescript", "tsx", "vue", "svelte":
 		spec := im.Path
 		r.alias = im.Alias
 		if strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "/") {
