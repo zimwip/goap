@@ -145,6 +145,8 @@ type guardTx struct {
 	// positions are the positions of branches on their targets it read (Position, ADR 0177), dropped whenever a branch
 	// takes commits
 	positions map[positionKey]int64
+	// branchNodes are the nodes of branches it read (BranchNodeIDs), dropped like positions
+	branchNodes map[[2]string][]domain.NodeID
 	// wroteLinks are the links of versions it wrote, read back in a batch (prefetch), dropped when it writes links of
 	// the version again
 	wroteLinks map[domain.NodeRef][]domain.Link
@@ -616,6 +618,7 @@ func (t *guardTx) change(ctx context.Context, id domain.ChangeID) (domain.Change
 }
 
 func (t *guardTx) PutNode(ctx context.Context, n domain.Node, links LinkSet) error {
+	t.branchNodes = nil // the branch the version is committed on holds one node more
 	what := "node " + n.Key + " v" + fmt.Sprint(n.Version)
 	if err := t.needChange(n.ChangeID, what); err != nil {
 		return err
@@ -769,9 +772,43 @@ func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.
 	if err != nil {
 		return err
 	}
-	t.positions = nil
+	t.branchesMoved()
 	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }
+
+// TakeCommits is takeRows over a range of the commits of another branch (ADR 0177).
+func (t *guardTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
+		return err
+	}
+	if logSeq != 0 && !(t.reserved.change == change && t.reserved.seq == logSeq) && (logSeq > t.appended[change] || t.appended[change] == 0) {
+		return fmt.Errorf("the commits %s takes: log entry %d of change %s is neither reserved nor appended by the transaction: %w", branch, logSeq, change, ErrInvalid)
+	}
+	delete(t.latestOn, domain.BranchOf(branch))
+	t.branchesMoved()
+	return t.Tx.TakeCommits(ctx, branch, change, logSeq, namespace, from, after, upTo)
+}
+
+// BranchNodeIDs keeps what it read until a branch takes or writes commits: a merge asks for the work of a change's
+// branch several times (ADR 0177).
+func (t *guardTx) BranchNodeIDs(ctx context.Context, branch, except string) ([]domain.NodeID, error) {
+	k := [2]string{domain.BranchOf(branch), except}
+	if ids, ok := t.branchNodes[k]; ok {
+		return slices.Clone(ids), nil
+	}
+	ids, err := t.Tx.BranchNodeIDs(ctx, branch, except)
+	if err != nil {
+		return nil, err
+	}
+	if t.branchNodes == nil {
+		t.branchNodes = map[[2]string][]domain.NodeID{}
+	}
+	t.branchNodes[k] = slices.Clone(ids)
+	return ids, nil
+}
+
+// branchesMoved drops what was read of the commits branches hold: a branch took or wrote some.
+func (t *guardTx) branchesMoved() { t.positions, t.branchNodes = nil, nil }
 
 // positionKey names a position read: the branch, its target and the order of its fork.
 type positionKey struct {
@@ -810,7 +847,7 @@ func (t *guardTx) takeRows(ctx context.Context, branch string, change domain.Cha
 		return err
 	}
 	delete(t.latestOn, domain.BranchOf(branch))
-	t.positions = nil
+	t.branchesMoved()
 	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }
 
@@ -878,7 +915,8 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
-	t.purged, t.nodes, t.latestOn, t.keys, t.wroteLinks, t.positions = true, nil, nil, nil, nil, nil
+	t.purged, t.nodes, t.latestOn, t.keys, t.wroteLinks = true, nil, nil, nil, nil
+	t.branchesMoved()
 	t.g.versions.reset()
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err

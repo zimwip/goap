@@ -303,6 +303,16 @@ func (d dialect) fence() string {
 	return ""
 }
 
+// sqlTakeCommits makes a branch take the commits of the namespace another branch holds in a range of its orders, at
+// one new order (PostgreSQL: the order allocated once, by a materialized CTE; ADR 0177).
+func (d dialect) sqlTakeCommits(branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) (string, []any) {
+	return `WITH n AS MATERIALIZED (SELECT nextval('commit_seq') AS at)
+		INSERT INTO branch_commit (branch, seq, at, change_id, log_seq)
+		SELECT $1, j.seq, n.at, $2, $3 FROM n, branch_commit j JOIN commits c ON c.seq = j.seq
+		WHERE j.branch = $4 AND j.at > $5 AND j.at <= $6 AND c.namespace = $7 ON CONFLICT DO NOTHING`,
+		[]any{domain.BranchOf(branch), string(change), nullSeq(logSeq), domain.BranchOf(from), after, upTo, domain.NamespaceOf(namespace)}
+}
+
 // sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, the log entry recording it, then
 // the list of their orders; a commit the branch took already keeps the order it was taken at.
 func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) (string, []any) {

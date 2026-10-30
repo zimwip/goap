@@ -1929,3 +1929,12 @@ func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {
 	err := t.tx.QueryRow(ctx, q, args...).Scan(&seq)
 	return seq, err
 }
+
+func (t *pgTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	q, args := dialectPG.sqlTakeCommits(branch, change, logSeq, namespace, from, after, upTo)
+	if t.held != nil {
+		return t.held.write(ctx, q, args, "branch commits")
+	}
+	_, err := t.tx.Exec(ctx, q, args...)
+	return mapErr(err, "branch "+branch)
+}

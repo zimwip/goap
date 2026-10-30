@@ -140,6 +140,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg BranchNodeIDs", pg, q, a, `SELECT DISTINCT v.node_id::text FROM branch_commit j CROSS JOIN LATERAL (SELECT v.node_id FROM node_version v WHERE v.committed = j.seq OFFSET 0) v WHERE j.branch = $1 AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = $2 AND e.seq = j.seq OFFSET 0)`, []any{"change-1", "main"})
 	q, a = lite.sqlBranchNodeIDs("change-1", "")
 	check("sqlite BranchNodeIDs", lite, q, a, `SELECT DISTINCT v.node_id FROM branch_commit j JOIN node_version v ON v.committed = j.seq WHERE j.branch = ? AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ? AND e.seq = j.seq)`, []any{"change-1", ""})
+	q, _ = pg.sqlTakeCommits("change-1", "c", 9, "default", "main", 3, 8)
+	checkSQL(t, "pg TakeCommits", pg, q, `WITH n AS MATERIALIZED (SELECT nextval('commit_seq') AS at) INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, j.seq, n.at, $2, $3 FROM n, branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch = $4 AND j.at > $5 AND j.at <= $6 AND c.namespace = $7 ON CONFLICT DO NOTHING`)
 	q, a = pg.sqlPosition("change-1", "main", 7)
 	check("pg Position", pg, q, a, `SELECT coalesce(max(x), 0) FROM ( SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = $2 AND p.seq = b.seq) AS x FROM branch_commit b WHERE b.branch = $1 UNION ALL SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = $2 AND p.seq = $3) ) y`, []any{"change-1", "main", int64(7)})
 	q, a = lite.sqlPosition("change-1", "main", 7)
