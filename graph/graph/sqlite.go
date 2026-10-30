@@ -883,6 +883,12 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if e.Seq != 0 {
+		// its position reserved (ReserveLogSeq)
+		_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
+			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
+		return e, sqliteErr(err, "log entry "+e.Type)
+	}
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
 	if err != nil {
@@ -984,17 +990,19 @@ func (t *sqliteTx) NodeChangePage(ctx context.Context, node domain.NodeID, befor
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error {
+// ReserveLogSeq is the position the next entry of the log takes: the one connection writing, nothing takes it first
+// but an entry of this transaction.
+func (t *sqliteTx) ReserveLogSeq(ctx context.Context, _ domain.ChangeID) (int64, error) {
 	if err := t.writes(); err != nil {
-		return err
+		return 0, err
 	}
-	q, args := dialectSQLite.sqlSetLogSeq(refs, seq)
-	_, err := t.tx.ExecContext(ctx, q, args...)
-	return sqliteErr(err, "versions committed")
+	var seq int64
+	err := t.tx.QueryRowContext(ctx, `SELECT coalesce((SELECT seq FROM sqlite_sequence WHERE name = 'change_log'), 0) + 1`).Scan(&seq)
+	return seq, sqliteErr(err, "log position")
 }
 
-func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
+func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment, nullSeq(logSeq))
 	if err != nil {
 		return sqliteErr(err, "node "+ref.String())
 	}

@@ -52,15 +52,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 		}
 	}
 
-	// the entry that committed versions (ADR 0174 addendum)
-	q, a := pg.sqlSetLogSeq([]domain.NodeRef{ref}, 7)
-	seq := int64(7)
-	check("pg SetLogSeq", pg, q, a, `UPDATE node_version v SET log_seq = $1 FROM unnest($2::uuid[], $3::int[]) AS r(id, version) WHERE v.node_id = r.id AND v.version = r.version`, []any{&seq, []string{"n1"}, []int32{3}})
-	q, a = lite.sqlSetLogSeq([]domain.NodeRef{ref}, 7)
-	check("sqlite SetLogSeq", lite, q, a, `UPDATE node_version SET log_seq = ?1 WHERE (node_id, version) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))`, []any{&seq, `[["n1",3]]`})
-
 	// Node
-	q, a = pg.sqlNode(ref)
+	q, a := pg.sqlNode(ref)
 	check("pg Node", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = $2`, []any{"n1", 3})
 	q, a = lite.sqlNode(ref)
 	check("sqlite Node", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = ?`, []any{"n1", 3})
@@ -405,8 +398,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg DeleteTag", pg, q, `DELETE FROM tag WHERE id = $1`)
 	q, _ = lite.sqlDeleteTag("t1")
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
-	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`)
+	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5, log_seq = $6 WHERE node_id = $1 AND version = $2`)
+	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ?, log_seq = ? WHERE node_id = ? AND version = ?`)
 	q, _ = pg.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
 	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`)
 	q, _ = lite.sqlJoinCommits("main", "c1", 9, []int64{3, 4})

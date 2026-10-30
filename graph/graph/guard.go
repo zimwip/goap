@@ -137,10 +137,9 @@ type guardTx struct {
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
 	written map[domain.NodeRef]bool
-	// writtenBy is the change of each version it wrote or gave another origin (SetNodeOrigin)
-	writtenBy map[domain.NodeRef]domain.ChangeID
-	// sequenced are the versions it wrote that it stamped with the entry that committed them (committedAt)
-	sequenced map[domain.NodeRef]bool
+	// reserved is the position of the log entry committing the versions being written (ReserveLogSeq): the next entry
+	// the transaction appends, of that change, and the one every version of that change written meanwhile names
+	reserved logPos
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
 	// origins are the versions whose origin the transaction set: read again by the next ones once it commits
@@ -430,6 +429,43 @@ func (t *guardTx) knowHeads(cs []domain.Change) {
 	}
 }
 
+// logPos is a position in the log of a change.
+type logPos struct {
+	change domain.ChangeID
+	seq    int64
+}
+
+// ReserveLogSeq reserves the position of the entry committing the versions written next (ADR 0174 addendum): they
+// name it as they are written, the entry appended after them takes it, and nothing else is appended meanwhile.
+func (t *guardTx) ReserveLogSeq(ctx context.Context, change domain.ChangeID) (int64, error) {
+	if t.reserved.seq != 0 {
+		return 0, fmt.Errorf("change %s: a log position is reserved already for change %s", change, t.reserved.change)
+	}
+	if err := t.LockChange(ctx, change); err != nil {
+		return 0, err
+	}
+	seq, err := t.Tx.ReserveLogSeq(ctx, change)
+	if err != nil {
+		return 0, err
+	}
+	t.reserved = logPos{change, seq}
+	return seq, nil
+}
+
+// committing checks the position of the log entry a version of a change names: the one reserved, and while one is,
+// every version of that change names it.
+func (t *guardTx) committing(what string, change domain.ChangeID, seq int64) error {
+	switch {
+	case seq == 0 && t.reserved.change != change:
+		return nil
+	case seq == 0 || t.reserved.seq == 0:
+		return fmt.Errorf("%s: names log entry %d of change %s, %d is reserved (change %q): the entry committing a version is reserved before it is written: %w", what, seq, change, t.reserved.seq, t.reserved.change, ErrInvalid)
+	case seq != t.reserved.seq || change != t.reserved.change:
+		return fmt.Errorf("%s: names log entry %d of change %s, %d of %s is reserved: %w", what, seq, change, t.reserved.seq, t.reserved.change, ErrInvalid)
+	}
+	return nil
+}
+
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	if err := t.beforeAppend(ctx, e); err != nil {
 		return e, err
@@ -443,6 +479,9 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 
 // AppendLogs appends entries in their order, in one statement when the store can (logBatcher).
 func (t *guardTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	if t.reserved.seq != 0 && len(entries) > 1 {
+		return nil, fmt.Errorf("change %s: log entries appended while position %d is reserved", t.reserved.change, t.reserved.seq)
+	}
 	for _, e := range entries {
 		if err := t.beforeAppend(ctx, e); err != nil {
 			return nil, err
@@ -459,6 +498,9 @@ func (t *guardTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]
 }
 
 func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
+	if e.Seq != t.reserved.seq || (e.Seq != 0 && e.Change != t.reserved.change) {
+		return fmt.Errorf("log entry %s of change %s at %d: position %d of change %q is reserved: %w", e.Type, e.Change, e.Seq, t.reserved.seq, t.reserved.change, ErrInvalid)
+	}
 	if err := t.LockChange(ctx, e.Change); err != nil {
 		return err
 	}
@@ -473,6 +515,9 @@ func (t *guardTx) beforeAppend(ctx context.Context, e domain.LogEntry) error {
 }
 
 func (t *guardTx) afterAppend(e domain.LogEntry) {
+	if e.Seq == t.reserved.seq {
+		t.reserved = logPos{}
+	}
 	if t.appended == nil {
 		t.appended = map[domain.ChangeID]int64{}
 	}
@@ -648,6 +693,9 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Responsible] = what
 	t.projects[n.Project] = what
+	if err := t.committing(what, n.ChangeID, n.LogSeq); err != nil {
+		return err
+	}
 	if n.Committed >= 0 { // a negative order commits the version in no commit (a test fixture)
 		committed, err := t.commitOn(ctx, n.Branch, n.ChangeID)
 		if err != nil {
@@ -675,38 +723,7 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 		t.written = map[domain.NodeRef]bool{}
 	}
 	t.written[n.Ref()] = true
-	if t.writtenBy == nil {
-		t.writtenBy = map[domain.NodeRef]domain.ChangeID{}
-	}
-	t.writtenBy[n.Ref()] = n.ChangeID
 	return nil
-}
-
-// committedAt records the entry of the log of a change that committed versions (its committed events, ADR 0174
-// addendum) on the versions of that change they name that the transaction wrote or gave to that change, the first
-// entry naming each (a later one, a merge taking it, commits it again). A version no committed event names (a revert: it has no impact either) names none.
-func (t *guardTx) committedAt(ctx context.Context, change domain.ChangeID, seq int64, named []domain.NodeRef) error {
-	var refs []domain.NodeRef
-	for _, r := range named {
-		// an entry of the log of the version's own change (a parent recording what a sub-change merged names it too)
-		if t.writtenBy[r] == change && !t.sequenced[r] && !slices.Contains(refs, r) {
-			refs = append(refs, r)
-		}
-	}
-	if len(refs) == 0 {
-		return nil
-	}
-	if t.sequenced == nil {
-		t.sequenced = map[domain.NodeRef]bool{}
-	}
-	for _, r := range refs {
-		t.sequenced[r] = true
-		if n, ok := t.nodes[r]; ok {
-			n.LogSeq = seq
-			t.nodes[r] = n
-		}
-	}
-	return t.Tx.SetLogSeq(ctx, refs, seq)
 }
 
 func (t *guardTx) PutLinks(ctx context.Context, ls []domain.Link) error {
@@ -751,8 +768,14 @@ func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkS
 	return t.Tx.PutLinkSet(ctx, from, set)
 }
 
-func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
+func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
 	if err := t.needChange(change, "the origin of node "+ref.String()); err != nil {
+		return err
+	}
+	if logSeq == 0 {
+		return fmt.Errorf("the origin of node %s names no log entry: %w", ref, ErrInvalid)
+	}
+	if err := t.committing("the origin of node "+ref.String(), change, logSeq); err != nil {
 		return err
 	}
 	delete(t.nodes, ref)
@@ -761,17 +784,7 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 	}
 	t.origins[ref] = true
 	t.g.versions.forgetNode(ref)
-	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
-}
-
-// retaken records that a version is now another change's (a sub-change's taken by its parent, a merge's by the
-// change merged, SetNodeOrigin): the entry of that change committing it stamps it again (committedAt).
-func (t *guardTx) retaken(ref domain.NodeRef, change domain.ChangeID) {
-	if t.writtenBy == nil {
-		t.writtenBy = map[domain.NodeRef]domain.ChangeID{}
-	}
-	t.writtenBy[ref] = change
-	delete(t.sequenced, ref)
+	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment, logSeq)
 }
 
 // JoinCommits makes a branch take commits (ADR 0176), from the order of the commit being written on it.
@@ -865,6 +878,9 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 // verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist, and
 // that every version it committed is in a commit.
 func (t *guardTx) verify(ctx context.Context) error {
+	if t.reserved.seq != 0 {
+		return fmt.Errorf("change %s: log position %d reserved for versions no entry committed", t.reserved.change, t.reserved.seq)
+	}
 	for branch := range t.commit {
 		return fmt.Errorf("versions committed on branch %s in no commit: a version is written when its change commits (ADR 0079, 0140): %w", branch, ErrInvalid)
 	}

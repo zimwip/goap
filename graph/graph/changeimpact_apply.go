@@ -228,7 +228,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 	}
 	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
 		State: d.State, ChangeID: a.change.ID, Responsible: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now(),
-		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor, Deleted: d.Deleted}
+		Creator: domain.Creator{Subject: d.Creator}, Editor: d.Editor, Deleted: d.Deleted, LogSeq: a.logSeq}
 	if d.Base == nil {
 		// a key is one node's: another change may have created it meanwhile
 		id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key)
@@ -375,6 +375,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 		}
 	}
 	var committed []domain.ImpactEvent
+	var seq int64 // the position of the entry of the commit, reserved when it gives a version to the change
 	for _, cn := range c.Impacts().All() {
 		if !commits(cn) {
 			continue
@@ -398,16 +399,23 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 		// a version the change wrote itself already names it (a fast-forward): rewriting the row would only cost a new
 		// tuple and its index entries
 		if head.ChangeID != c.ID || head.ChangeImpact != cn.ID || head.Comment != comment {
-			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
-				return err
+			// the version is now this change's, committed by the entry of this commit: its position reserved first
+			if seq == 0 {
+				var err error
+				if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
+					return err
+				}
 			}
-			if gt, ok := unwrapGuard(tx); ok && head.ChangeID != c.ID {
-				gt.retaken(ref, c.ID) // its log entry is the one of this commit
+			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment, seq); err != nil {
+				return err
 			}
 		}
 		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
 	}
 	// one entry for the commit (ADR 0144)
+	if seq != 0 {
+		return g.emitAt(ctx, tx, seq, committed...)
+	}
 	return g.emit(ctx, tx, committed...)
 }
 

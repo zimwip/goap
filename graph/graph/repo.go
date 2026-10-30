@@ -169,7 +169,8 @@ type Tx interface {
 	// PutChange inserts or updates the change header (items are ignored).
 	PutChange(ctx context.Context, c domain.Change) error
 	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in
-	// one order) and returns it with its Seq. The log is insert-only: nothing updates or deletes an entry.
+	// one order) and returns it with its Seq, the position reserved for it when e.Seq is set (ReserveLogSeq). The log
+	// is insert-only: nothing updates or deletes an entry.
 	AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error)
 	// AppendOutbox writes the events of the transaction in the outbox of the graph (ADR 0136), published once it
 	// commits.
@@ -188,11 +189,13 @@ type Tx interface {
 	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
 	// history, whatever its length; ADR 0174: committed or not, read from the log).
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
-	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
-	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
-	// SetLogSeq records on versions the position of the entry of the log of their change that committed them (the
-	// guard, once that entry is appended).
-	SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error
+	// SetNodeOrigin records on a node version the change and change impact that produced it, its comment and the
+	// position of the entry of the log of that change committing it.
+	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error
+	// ReserveLogSeq reserves the position the next entry of the log of a change takes: the versions a commit writes
+	// name the entry committing them as they are written (node_version.log_seq), the entry appended after them with
+	// that position (AppendLog with e.Seq set).
+	ReserveLogSeq(ctx context.Context, change domain.ChangeID) (int64, error)
 
 	// JoinCommits makes a branch take commits of another branch as they are (a merge, ADR 0176): their versions are
 	// not copied and keep the branch they were written on, the branch holds them from the order at (the guard of the

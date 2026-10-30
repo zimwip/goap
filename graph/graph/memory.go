@@ -844,6 +844,9 @@ func (t *memTx) AppendLog(_ context.Context, e domain.LogEntry) (domain.LogEntry
 		}
 	}
 	e.Payload = slices.Clone(e.Payload)
+	if next := int64(len(t.st.log) + 1); e.Seq != 0 && e.Seq != next {
+		return e, fmt.Errorf("log entry %s: position %d reserved, the next is %d: %w", e.ID, e.Seq, next, ErrConflict)
+	}
 	e.Seq = int64(len(t.st.log) + 1)
 	t.st.log = append(t.st.log, e)
 	return e, nil
@@ -922,7 +925,7 @@ func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int
 	return out, nil
 }
 
-func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
+func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
 	if err := t.write(); err != nil {
 		return err
 	}
@@ -930,22 +933,15 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
-	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeImpact, vs[ref.Version-1].Comment = change, cn, comment
+	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeImpact, vs[ref.Version-1].Comment, vs[ref.Version-1].LogSeq = change, cn, comment, logSeq
 	return nil
 }
 
-func (t *memTx) SetLogSeq(_ context.Context, refs []domain.NodeRef, seq int64) error {
+func (t *memTx) ReserveLogSeq(_ context.Context, _ domain.ChangeID) (int64, error) {
 	if err := t.write(); err != nil {
-		return err
+		return 0, err
 	}
-	for _, ref := range refs {
-		vs := t.st.versions[ref.ID]
-		if ref.Version < 1 || int(ref.Version) > len(vs) {
-			return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-		}
-		vs[ref.Version-1].LogSeq = seq
-	}
-	return nil
+	return int64(len(t.st.log) + 1), nil
 }
 
 func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {

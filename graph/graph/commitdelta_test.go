@@ -88,6 +88,11 @@ func checkCommits(t *testing.T, repo Repo) {
 				}
 				v, in := b.Nodes[n.ID]
 				switch {
+				case n.Reason == domain.ReasonRevert && !n.Deleted:
+					// a revert reads as the version of the fork it copies (ADR 0140)
+					if !in {
+						t.Errorf("change %s: %s reverted as v%d in %s, which does not hold it", c.ID, n.Key, n.Version, b.ID)
+					}
 				case n.Deleted && in:
 					t.Errorf("change %s: %s committed as a tombstone in %s, which holds v%d", c.ID, n.Key, b.ID, v)
 				case !n.Deleted && v != n.Version:

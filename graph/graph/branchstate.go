@@ -183,21 +183,31 @@ func (g *Graph) forkMoved(ctx context.Context, tx Tx, c domain.Change, own *doma
 	if cur.Head == "" || cur.ForkCommit == from {
 		return nil
 	}
-	if err := g.refreshReverts(ctx, tx, c, cur, from); err != nil {
+	reverts, seq, err := g.refreshReverts(ctx, tx, c, cur, from)
+	if err != nil {
 		return err
 	}
-	_, err = g.commitOwn(ctx, tx, own, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindRebase, MergedFrom: cur.ForkCommit, RebasedFrom: from})
-	return err
+	b, err := g.commitOwn(ctx, tx, own, domain.Commit{Name: c.Title, ChangeID: c.ID, Kind: domain.CommitKindRebase, MergedFrom: cur.ForkCommit, RebasedFrom: from})
+	if err != nil || len(reverts) == 0 {
+		return err
+	}
+	// the reverts written again commit for their impacts, in the entry they name (ADR 0174 addendum)
+	committed := make([]domain.ImpactEvent, len(reverts))
+	for i, n := range reverts {
+		ref := n.Ref()
+		committed[i] = domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: b.ID, Branch: domain.BranchOf(own.Name)}
+	}
+	return g.emitAt(ctx, tx, seq, committed...)
 }
 
 // refreshReverts writes again, over the new fork of the branch of a change, the reverts the branch holds of the nodes
 // the fork moved (ADR 0176): a revert is a version like any other, a copy of the version of the fork it puts back, and a
 // branch taking the commits of the change reads it as it is, so it must stay the copy of the fork the branch stands on.
-// The new versions commit in the commit recording the move.
-func (g *Graph) refreshReverts(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, from domain.CommitID) error {
+// The new versions commit in the commit recording the move, named by the log entry at the position returned.
+func (g *Graph) refreshReverts(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, from domain.CommitID) ([]domain.Node, int64, error) {
 	ls, err := tx.BranchCommits(ctx, own.Namespace, own.Name, math.MaxInt64, nil)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	var ids []domain.NodeID
 	for id, l := range ls {
@@ -206,32 +216,43 @@ func (g *Graph) refreshReverts(ctx context.Context, tx Tx, c domain.Change, own 
 		}
 	}
 	if len(ids) == 0 {
-		return nil
+		return nil, 0, nil
 	}
 	slices.Sort(ids)
 	before, err := versionsAt(ctx, tx, from, ids)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
 	after, err := versionsAt(ctx, tx, own.ForkCommit, ids)
 	if err != nil {
-		return err
+		return nil, 0, err
 	}
+	var wrote []domain.Node
+	var seq int64
 	for _, id := range ids {
 		if before[id] == after[id] {
 			continue
 		}
-		if _, err := g.writeRevert(ctx, tx, own.Name, c.ID, id, after[id], "reverted again over the new fork of the change"); err != nil {
-			return err
+		if seq == 0 {
+			if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
+				return nil, 0, err
+			}
 		}
+		// the impact the revert commits for: the one of the revert it replaces
+		n, err := g.writeRevert(ctx, tx, own.Name, c.ID, "", seq, id, after[id], "reverted again over the new fork of the change")
+		if err != nil {
+			return nil, 0, err
+		}
+		wrote = append(wrote, n)
 	}
-	return nil
+	return wrote, seq, nil
 }
 
 // writeRevert writes on the branch of a change a revert of a node: a version with the properties and links of the
 // version v of the fork of the branch, a deletion when the fork does not hold the node (v 0), which the branch reads as
-// that version (ADR 0140) and a branch taking its commit as it is (ADR 0176).
-func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change domain.ChangeID, id domain.NodeID, v domain.Version, comment string) (domain.Node, error) {
+// that version (ADR 0140) and a branch taking its commit as it is (ADR 0176). It names the impact withdrawn it commits
+// for (empty: the one of the version it follows, a revert written again) and the log entry committing it (logSeq).
+func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change domain.ChangeID, cn domain.ChangeImpactID, logSeq int64, id domain.NodeID, v domain.Version, comment string) (domain.Node, error) {
 	latest, err := tx.LatestOn(ctx, id, branch)
 	if err != nil {
 		return domain.Node{}, err
@@ -240,8 +261,11 @@ func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change do
 	if err != nil {
 		return domain.Node{}, err
 	}
+	if cn == "" {
+		cn = latest.ChangeImpact
+	}
 	n := domain.Node{ID: id, Version: next, Branch: branch, Namespace: latest.Namespace, Key: latest.Key, Type: latest.Type, ChangeID: change,
-		Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Responsible: latest.Responsible, Project: latest.Project,
+		ChangeImpact: cn, LogSeq: logSeq, Reason: domain.ReasonRevert, Parents: []domain.Version{latest.Version}, Responsible: latest.Responsible, Project: latest.Project,
 		Comment: comment, CreatedAt: g.now()}
 	var links []domain.Link
 	like := []domain.NodeRef{latest.Ref()}

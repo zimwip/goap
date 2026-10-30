@@ -300,25 +300,6 @@ func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at int64,
 		[]any{domain.BranchOf(branch), string(change), at, string(b)}
 }
 
-// sqlSetLogSeq stamps versions with the position of the entry of the log of their change that committed them.
-func (d dialect) sqlSetLogSeq(refs []domain.NodeRef, seq int64) (string, []any) {
-	ids, vs := make([]string, len(refs)), make([]int32, len(refs))
-	for i, r := range refs {
-		ids[i], vs[i] = string(r.ID), int32(r.Version)
-	}
-	if d.pg {
-		return `UPDATE node_version v SET log_seq = $1 FROM unnest($2::uuid[], $3::int[]) AS r(id, version) WHERE v.node_id = r.id AND v.version = r.version`,
-			[]any{nullSeq(seq), ids, vs}
-	}
-	pairs := make([][2]any, len(refs))
-	for i := range refs {
-		pairs[i] = [2]any{ids[i], vs[i]}
-	}
-	b, _ := json.Marshal(pairs)
-	return `UPDATE node_version SET log_seq = ?1 WHERE (node_id, version) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))`,
-		[]any{nullSeq(seq), string(b)}
-}
-
 func nodeIDStrings(ids []domain.NodeID) []string {
 	list := make([]string, len(ids))
 	for i, id := range ids {
@@ -817,9 +798,10 @@ func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
 }
 
-// sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment.
+// sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment, the position
+// of the log entry committing it.
 func (d dialect) sqlSetNodeOrigin() string {
-	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
+	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + `, log_seq = ` + d.ph(6) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
 // deleteChangeUsed are the counts that must be zero for a change to be deleted: what it wrote is used by nothing it

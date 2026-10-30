@@ -308,8 +308,8 @@ func checkVersionImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events 
 			return fmt.Errorf("version %s committed for impact %s names impact %q", e.Committed, e.Impact, n.ChangeImpact)
 		}
 	}
-	// a version names an entry of its change committing it: the commit that wrote it, or the one that took it as its
-	// change's (a parent taking a sub-change's, SetNodeOrigin)
+	// every version of the change names an impact and an entry of its change committing it: the commit that wrote it
+	// (a revert included, for the impact withdrawn), or the one that took it as its change's (SetNodeOrigin)
 	naming := map[domain.NodeRef]map[int64]bool{}
 	for _, e := range events {
 		if e.Op == domain.ImpactCommitted && e.Committed != nil {
@@ -325,7 +325,13 @@ func checkVersionImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events 
 			return err
 		}
 		for _, n := range vs {
-			if seqs, ok := naming[n.Ref()]; ok && n.ChangeID == id && !seqs[n.LogSeq] {
+			if n.ChangeID != id || len(events) == 0 { // the bootstrap writes its roots with no impact (ADR 0054)
+				continue
+			}
+			if n.ChangeImpact == "" {
+				return fmt.Errorf("version %s (%s) of change %s names no impact", n.Ref(), n.Reason, id)
+			}
+			if seqs := naming[n.Ref()]; !seqs[n.LogSeq] {
 				return fmt.Errorf("version %s (%s) names log entry %d, which does not commit it in its change (%v)", n.Ref(), n.Reason, n.LogSeq, seqs)
 			}
 		}

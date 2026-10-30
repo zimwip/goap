@@ -659,6 +659,9 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	}
 	var stuck []string
 	var phases [4][]domain.ImpactEvent
+	// writes are the merge versions, written once the impacts are declared and reviewed, each naming the entry
+	// committing it (ADR 0174 addendum)
+	var writes []domain.Node
 	for i, m := range todo {
 		n := *m.from
 		n.Reason, n.Parents = domain.ReasonMerge, []domain.Version{m.from.Version}
@@ -691,9 +694,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			}
 			n.Version, n.Branch, n.Deleted, n.ChangeID, n.ChangeImpact, n.Comment, n.CreatedAt = v, plan.Into, deleted, c.ID, cn.ID, why, g.now()
 			n.Editor, n.Visibility = "", "" // the merger's version, seen as the domain says now (ADR 0161)
-			if err := tx.PutNode(ctx, n); err != nil {
-				return res, err
-			}
+			writes = append(writes, n)
 		}
 		m.next = n.Ref()
 		// the merge records its change impact as events, accepted and committed at once: a node the merge creates on the
@@ -723,10 +724,27 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			stuck = append(stuck, fmt.Sprintf("%s (%s) in %s", n.Key, n.Type, n.State))
 		}
 	}
-	for _, events := range phases {
+	for _, events := range phases[:3] {
 		if err := g.emit(ctx, tx, events...); err != nil {
 			return res, err
 		}
+	}
+	if len(writes) > 0 {
+		seq, err := tx.ReserveLogSeq(ctx, c.ID)
+		if err != nil {
+			return res, err
+		}
+		for _, n := range writes {
+			n.LogSeq = seq
+			if err := tx.PutNode(ctx, n); err != nil {
+				return res, err
+			}
+		}
+		if err := g.emitAt(ctx, tx, seq, phases[3]...); err != nil {
+			return res, err
+		}
+	} else if err := g.emit(ctx, tx, phases[3]...); err != nil {
+		return res, err
 	}
 
 	if len(stuck) > 0 {

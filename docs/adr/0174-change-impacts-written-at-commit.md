@@ -108,9 +108,17 @@ change names on its own branch names that event's impact). A commit writes the v
 A change commits several times (ADR 0102): an impact may write a version at each commit, so the impact alone does not
 say which of its commits wrote a version. A version names the entry of its change's log that committed it
 (`node_version.log_seq`, migration `0031_node_version_log_seq`, both dialects; `Node.LogSeq`, proto `Node.log_seq`):
-the view of the change read at that position says what made it then (intent, rationale, review). The guard stamps it
-once the committed entry is appended (`guardTx.committedAt`, one `UPDATE` per commit, `Tx.SetLogSeq`, queued on
-PostgreSQL): the versions the entry names that the transaction wrote for that change, the first entry naming each; a
-version another change takes as its own (`SetNodeOrigin`: a parent taking a sub-change's, `guardTx.retaken`) is stamped
-again by that change's entry. A revert, which has no impact, names none, as a fixture version. `checkVersionImpacts`
-checks that the entry a version names commits it in its change.
+the view of the change read at that position says what made it then (intent, rationale, review). The entry is known
+before the versions: the commit reserves its position first (`Tx.ReserveLogSeq`: on PostgreSQL the position the lock
+of the change read ahead, else one of the sequence; on SQLite and in memory the next one, the writer being alone), writes
+the versions naming it, then appends the entry at that position (`Graph.emitAt`, `AppendLog` with `Seq` set): no
+`UPDATE` of a version. The guard holds it so (`guardTx.reserved`): one reservation at a time, nothing else appended
+until the entry takes it, every version of that change written meanwhile naming it, none naming a position not
+reserved, no reservation left at the end of the transaction. The commit of a change, a merge (its versions written
+once its impacts are declared and reviewed, before the entry of its commit), the reverts written again over a moved
+fork (`refreshReverts`, the entry of the `rebase` commit) and a version another change takes as its own
+(`SetNodeOrigin` with the position, in its one `UPDATE`: a parent taking a sub-change's) all write so. A revert
+commits for the impact withdrawn (`withdrawnImpacts`: the last withdrawn impact of the node, from the log; written
+again, the impact of the revert it replaces): it names it and the `committed` entry of its commit names the revert,
+which the view of the change, holding the impact no more, leaves aside. `checkVersionImpacts` checks that every version
+of a change names an impact and an entry of its change committing it (the bootstrap's roots aside).

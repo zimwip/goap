@@ -1329,16 +1329,27 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 	if len(payload) == 0 {
 		payload = []byte("null") // an entry with no payload: the column holds JSON, never NULL
 	}
-	if seq := t.takeNext(e.Change); seq != 0 {
-		// its position is known: the insert waits for the next statement, or the commit
-		e.Seq = seq
-		t.pipe.queue(dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)}, "log entry "+e.Type)
-		return e, nil
+	seq := e.Seq // reserved (ReserveLogSeq)
+	if seq == 0 {
+		seq = t.takeNext(e.Change)
+	} else {
+		t.dropNext()
 	}
 	q := t.tx
 	if t.held != nil {
 		q = t.held.Tx // an entry of a log reads none of the rows held: they wait
+	}
+	if seq != 0 {
+		// its position is known: the insert waits for the next statement, or the commit
+		e.Seq = seq
+		insert, args := dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
+			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)}
+		if t.pipe == nil {
+			_, err := q.Exec(ctx, insert, args...)
+			return e, mapErr(err, "log entry "+e.Type)
+		}
+		t.pipe.queue(insert, args, "log entry "+e.Type)
+		return e, nil
 	}
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)).Scan(&e.Seq)
@@ -1513,8 +1524,8 @@ func (t *pgTx) NodeChangePage(ctx context.Context, node domain.NodeID, before in
 	return out, rows.Err()
 }
 
-func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
+func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
+	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment, nullSeq(logSeq))
 	if err != nil {
 		return mapErr(err, "node "+ref.String())
 	}
@@ -1524,13 +1535,15 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error {
-	q, args := dialectPG.sqlSetLogSeq(refs, seq)
-	if t.held != nil {
-		return t.held.write(ctx, q, args, "versions committed")
+// ReserveLogSeq takes the position the lock of the change read ahead when no entry took it yet (lockedHead), else
+// one of the sequence.
+func (t *pgTx) ReserveLogSeq(ctx context.Context, id domain.ChangeID) (int64, error) {
+	if seq := t.takeNext(id); seq != 0 {
+		return seq, nil
 	}
-	_, err := t.tx.Exec(ctx, q, args...)
-	return mapErr(err, "versions committed")
+	var seq int64
+	err := t.unheld().QueryRow(ctx, `SELECT nextval(pg_get_serial_sequence('change_log', 'seq'))`).Scan(&seq)
+	return seq, mapErr(err, "log position")
 }
 
 func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
