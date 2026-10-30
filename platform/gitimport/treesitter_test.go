@@ -123,6 +123,47 @@ double Shape::area() const { return 0; }
 }
 int main() { return 0; }
 `, []string{"import:vector", "namespace:geo", "variable:geo.created", "enum:geo.Unit", "constant:geo.Unit.CM", "class:geo.Shape", "prototype:geo.Shape.area", "field:geo.Shape.sides", "method:geo.Shape.area", "function:main"}},
+		{"Counter.vue", `<template>
+  <button @click="increment" :class="{ big: count > 3 }">{{ count }}</button>
+  <Child v-if="count > 1" />
+</template>
+
+<script lang="ts">
+export default { name: 'Counter' }
+</script>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import Child from './Child.vue'
+interface Props { start: number }
+const count = ref(0)
+function increment(): void { count.value++ }
+</script>
+
+<style scoped>
+button { color: red; }
+</style>
+`, []string{"import:vue", "import:./Child.vue", "interface:Props", "field:Props.start", "variable:count", "function:increment"}},
+		{"Card.svelte", `<script>
+	import { onMount } from 'svelte';
+	export let title = '';
+	let open = false;
+	function toggle() { open = !open; }
+	class Store { items = []; add(x) { this.items.push(x); } }
+</script>
+
+{#if open}
+	<h2 on:click={toggle}>{title}</h2>
+{:else}
+	<p>{title.length > 3 ? 'long' : 'short'}</p>
+{/if}
+
+<style>
+	h2 { margin: 0; }
+</style>
+`, []string{"import:svelte", "variable:title", "variable:open", "function:toggle", "class:Store", "field:Store.items", "method:Store.add"}},
+		{"Plain.vue", `<template><p>no script</p></template>
+`, nil},
 	} {
 		lang := ts.Language(c.file)
 		src, err := ts.Parse(lang, []byte(c.src))
@@ -328,4 +369,40 @@ func within(code, src string) bool {
 		src = src[j+1:]
 	}
 	return true
+}
+
+// TestComponentScripts reads the scripts of the Vue and Svelte components with the grammar of their language, at the
+// offsets of the component file.
+func TestComponentScripts(t *testing.T) {
+	ts, err := NewTreeSitter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ts.Close()
+	for _, c := range []struct {
+		file, src, lang, sym, ref string
+	}{
+		{"A.vue", "<template><b @click=\"go\">x</b></template>\n<script setup lang=\"ts\">\nconst n: number = 1\nfunction go(): void { helper(n) }\n</script>\n", "typescript", "function go(): void { helper(n) }", "helper"},
+		{"B.vue", "<script>\nexport function go() { helper() }\n</script>\n<template><p/></template>\n", "javascript", "function go() { helper() }", "helper"},
+		{"C.svelte", "<script lang=\"ts\">\n\tfunction go(): void { helper() }\n</script>\n<p on:click={go}>{a > b}</p>\n", "typescript", "function go(): void { helper() }", "helper"},
+	} {
+		src, err := ts.Parse(ts.Language(c.file), []byte(c.src))
+		if err != nil {
+			t.Fatalf("%s: %v", c.file, err)
+		}
+		if src.Language != c.lang {
+			t.Errorf("%s: language %q, want %q", c.file, src.Language, c.lang)
+		}
+		i := slices.IndexFunc(src.Symbols, func(s Symbol) bool { return s.Name == "go" })
+		if i < 0 {
+			t.Fatalf("%s: no symbol go in %+v", c.file, src.Symbols)
+		}
+		s := src.Symbols[i]
+		if got := c.src[s.Start:s.End]; got != c.sym {
+			t.Errorf("%s: text %q, want %q", c.file, got, c.sym)
+		}
+		if !slices.ContainsFunc(s.Refs, func(r Ref) bool { return r.Kind == RefCall && r.Name == c.ref }) {
+			t.Errorf("%s: refs %+v, want a call of %s", c.file, s.Refs, c.ref)
+		}
+	}
 }

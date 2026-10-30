@@ -59,6 +59,8 @@ func TestPackages(t *testing.T) {
 		{"typescript", "web/main.ts", Import{Path: "./lib/b"}, "js:web/lib/b web/lib/b/index.js "},
 		{"typescript", "web/main.ts", Import{Path: "@scope/pkg/deep", Alias: "p"}, "js:@scope/pkg  p"},
 		{"javascript", "web/main.js", Import{Path: "react"}, "js:react  "},
+		{"vue", "web/App.vue", Import{Path: "./lib/a"}, "js:web/lib web/lib/a.ts "},
+		{"svelte", "web/Card.svelte", Import{Path: "svelte/store"}, "js:svelte  "},
 		{"c", "src/x/y.c", Import{Path: "local.h"}, "c:src/x src/x/local.h "},
 		{"c", "src/x/y.c", Import{Path: "util.h"}, "c:include include/util.h "},
 		{"c", "src/x/y.c", Import{Path: "stdio.h", System: true}, "c:stdio.h  "},

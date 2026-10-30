@@ -12,8 +12,11 @@ import (
 type Source struct {
 	// Package is the package the file declares (a Go package clause, a Java package), empty when its language has none.
 	Package string
-	Imports []Import
-	Symbols []Symbol
+	// Language is the language of the declarations when it is not the file's: the script of a Vue or Svelte
+	// component (javascript, typescript, tsx).
+	Language string
+	Imports  []Import
+	Symbols  []Symbol
 }
 
 // Import is a dependency a file names (import, #include, use), as written: the importer resolves it to a package.
@@ -85,7 +88,8 @@ var languages = map[string]string{
 	"py":   "python",
 	"java": "java",
 	"js":   "javascript", "mjs": "javascript", "cjs": "javascript", "jsx": "javascript",
-	"ts": "typescript", "tsx": "tsx",
+	"ts": "typescript", "tsx": "tsx", "mts": "typescript", "cts": "typescript",
+	"vue": "vue", "svelte": "svelte",
 	"rs": "rust",
 }
 

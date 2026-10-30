@@ -86,3 +86,18 @@ commit after commit like the files.
   declaration it names moves (the suspect link stays until its own text changes), a module path changed in `go.mod`
   (the packages of unchanged files keep their path), the packages shared across repositories (each repository has its
   own, external ones included).
+
+## Addendum: Vue and Svelte components
+
+A Vue single-file component (`.vue`) or a Svelte component (`.svelte`) is read through its scripts: the file is parsed
+with the grammar of its markup (Vue's top level is HTML, `tree-sitter-html`; Svelte has its own grammar,
+`tree-sitter-svelte`, which reads `{#if}` blocks and `{expr}` attributes), its `<script>` blocks found, then parsed
+together with the JavaScript or TypeScript grammar over their ranges of the file (Tree-sitter's included ranges, the
+mechanism of its language injection): the offsets, the text and the code of the declarations stay those of the
+component file. The language of the scripts is their `lang` attribute (`ts` / `typescript`, `tsx`, else JavaScript),
+given as `Source.Language` and used for the code text of the declarations; the symbols keep the file's language
+(`vue`, `svelte`). The components are of the `js` family: their imports and packages resolve as JavaScript's. The
+markup and the `<style>` blocks give no declaration (the code domain has no kind for a CSS rule, and the importer reads
+no `.css` file either), so they are not parsed. An Angular component is a TypeScript file, read as one; its templates
+(`.html`) are not read: they declare nothing, and `tree-sitter-angular` has no Go binding. `tree-sitter-vue` has none
+either, hence the HTML grammar for Vue. `.mts` and `.cts` files are read as TypeScript.
