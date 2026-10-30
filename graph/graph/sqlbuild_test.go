@@ -289,8 +289,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite LatestVersionsOn", lite, q, a, `SELECT id, version FROM (SELECT q.id, (SELECT v.version FROM node_version v WHERE v.node_id = q.id AND v.committed BETWEEN (SELECT min(k.seq) FROM branch_commit k WHERE k.branch = ?) AND (SELECT max(k.seq) FROM branch_commit k WHERE k.branch = ?) AND EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ? AND j.seq = v.committed) ORDER BY v.committed DESC, v.version DESC LIMIT 1) AS version FROM (SELECT value AS id FROM json_each(?)) q) l WHERE version IS NOT NULL`, []any{`["n1","n2"]`, "b"})
 
 	// Branches
-	const pgBranchCols = `namespace, name, parent, coalesce(fork_commit::text, ''), coalesce(head_commit::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
-	const liteBranchCols = `namespace, name, parent, coalesce(fork_commit, ''), coalesce(head_commit, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral`
+	const pgBranchCols = `namespace, name, parent, coalesce(fork_commit::text, ''), coalesce((SELECT h.id::text FROM commits h WHERE h.namespace = branch.namespace AND h.branch = branch.name ORDER BY h.seq DESC LIMIT 1), branch.head_commit::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
+	const liteBranchCols = `namespace, name, parent, coalesce(fork_commit, ''), coalesce((SELECT h.id FROM commits h WHERE h.namespace = branch.namespace AND h.branch = branch.name ORDER BY h.seq DESC LIMIT 1), branch.head_commit, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral`
 	q, a = pg.sqlBranch("", "b")
 	check("pg Branch", pg, q, a, `SELECT `+pgBranchCols+` FROM branch WHERE namespace = $1 AND name = $2`, []any{"default", "b"})
 	q, a = lite.sqlBranch("", "b")

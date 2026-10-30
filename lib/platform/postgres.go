@@ -16,6 +16,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// DefaultPostgresConns is the size of a pool of PostgreSQL connections a DSN gives none.
+const DefaultPostgresConns = 8
+
 // OpenPostgres connects to PostgreSQL. The DSN should set search_path to the
 // service schema (dev: one database, one schema per service).
 func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
@@ -24,6 +27,11 @@ func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	if !strings.Contains(dsn, "pool_max_conns") {
+		// more connections than this gave nothing measured (the writers of main wait on its lock, not on the pool);
+		// pool_max_conns in the DSN sets another size
+		cfg.MaxConns = DefaultPostgresConns
+	}
 	var pool *pgxpool.Pool
 	for attempt := 1; ; attempt++ {
 		pool, err = pgxpool.NewWithConfig(ctx, cfg)

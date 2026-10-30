@@ -514,7 +514,15 @@ const branchColsText = `namespace, name, parent, %s, %s, origin, status, created
 
 // branchCols is the select list of a branch.
 func (d dialect) branchCols() string {
-	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_commit"), d.idOr("coalesce", "head_commit"), d.idOr("coalesce", "rebased_from"))
+	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_commit"), d.branchHead("branch"), d.idOr("coalesce", "rebased_from"))
+}
+
+// branchHead is the head of the branch b names (a table or its alias): the last commit written on it, by order, else
+// the head it was created with (a branch made from a commit). A commit never moves the head stored: the head is the
+// search of the last commit (ADR 0174 addendum), over the index commit_branch.
+func (d dialect) branchHead(b string) string {
+	return `coalesce((SELECT ` + d.id("h.id") + ` FROM commits h WHERE h.namespace = ` + b + `.namespace AND h.branch = ` + b + `.name ORDER BY h.seq DESC LIMIT 1), ` +
+		d.id(b+".head_commit") + `, '')`
 }
 
 // sqlBranch reads a branch.

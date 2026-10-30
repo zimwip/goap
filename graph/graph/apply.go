@@ -362,7 +362,9 @@ func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string
 	case err != nil:
 		return err
 	}
-	if b.Head != head.ParentID {
+	// the head is the search of the last commit of the branch (ADR 0174 addendum): a commit written already is it; two
+	// commits standing on one parent meet on the key commit_parent
+	if b.Head != head.ParentID && b.Head != head.ID {
 		return fmt.Errorf("branch %s moved to %s while commit %s was built on %s: merge again: %w", name, b.Head, head.ID, head.ParentID, ErrConflict)
 	}
 	b.Head = head.ID
