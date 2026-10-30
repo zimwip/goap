@@ -934,6 +934,20 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	return nil
 }
 
+func (t *memTx) SetLogSeq(_ context.Context, refs []domain.NodeRef, seq int64) error {
+	if err := t.write(); err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		vs := t.st.versions[ref.ID]
+		if ref.Version < 1 || int(ref.Version) > len(vs) {
+			return fmt.Errorf("node %s: %w", ref, ErrNotFound)
+		}
+		vs[ref.Version-1].LogSeq = seq
+	}
+	return nil
+}
+
 func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
 	if err := t.write(); err != nil {
 		return err

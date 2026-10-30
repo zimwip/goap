@@ -107,7 +107,7 @@ func linkTo(prefix string) []sqlCol {
 func (d dialect) nodeCols() string {
 	return d.cols(su("n.id"), sc("v.version"), sc("n.namespace"), sc("n.key"), sc("n.type"), sc("v.props"), sc("v.deleted"), su("v.change_id"),
 		sc("v.created_at"), sc("v.branch"), sc("v.parents"), sc("v.reason"), sc("v.state"), su("v.change_impact"), sc("v.comment"),
-		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"), sc("n.creator"), sc("n.creator_unit"), sc("v.editor"), sc("v.visibility"))
+		sc("v.execution"), sc("v.owner"), sc("n.project"), sc("v.origins"), sc("n.creator"), sc("n.creator_unit"), sc("v.editor"), sc("v.visibility"), sc("v.log_seq"))
 }
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
@@ -298,6 +298,25 @@ func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at int64,
 	b, _ := json.Marshal(seqs)
 	return `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`,
 		[]any{domain.BranchOf(branch), string(change), at, string(b)}
+}
+
+// sqlSetLogSeq stamps versions with the position of the entry of the log of their change that committed them.
+func (d dialect) sqlSetLogSeq(refs []domain.NodeRef, seq int64) (string, []any) {
+	ids, vs := make([]string, len(refs)), make([]int32, len(refs))
+	for i, r := range refs {
+		ids[i], vs[i] = string(r.ID), int32(r.Version)
+	}
+	if d.pg {
+		return `UPDATE node_version v SET log_seq = $1 FROM unnest($2::uuid[], $3::int[]) AS r(id, version) WHERE v.node_id = r.id AND v.version = r.version`,
+			[]any{nullSeq(seq), ids, vs}
+	}
+	pairs := make([][2]any, len(refs))
+	for i := range refs {
+		pairs[i] = [2]any{ids[i], vs[i]}
+	}
+	b, _ := json.Marshal(pairs)
+	return `UPDATE node_version SET log_seq = ?1 WHERE (node_id, version) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))`,
+		[]any{nullSeq(seq), string(b)}
 }
 
 func nodeIDStrings(ids []domain.NodeID) []string {
@@ -855,7 +874,7 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility", "log_seq"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	commitColumns      = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq", "fork_commit"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload", "node"}

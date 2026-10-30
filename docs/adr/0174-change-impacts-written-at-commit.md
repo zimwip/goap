@@ -104,3 +104,13 @@ of (the difference of two baselines). The effect of a version over the one it wa
 kept, is no longer computed at commit (two reads per node committed again). The tests check the view instead
 (`checkVersionImpacts`: a version naming an impact names one of its change's log, the version a committed event of the
 change names on its own branch names that event's impact). A commit writes the versions and their links only.
+
+A change commits several times (ADR 0102): an impact may write a version at each commit, so the impact alone does not
+say which of its commits wrote a version. A version names the entry of its change's log that committed it
+(`node_version.log_seq`, migration `0031_node_version_log_seq`, both dialects; `Node.LogSeq`, proto `Node.log_seq`):
+the view of the change read at that position says what made it then (intent, rationale, review). The guard stamps it
+once the committed entry is appended (`guardTx.committedAt`, one `UPDATE` per commit, `Tx.SetLogSeq`, queued on
+PostgreSQL): the versions the entry names that the transaction wrote for that change, the first entry naming each; a
+version another change takes as its own (`SetNodeOrigin`: a parent taking a sub-change's, `guardTx.retaken`) is stamped
+again by that change's entry. A revert, which has no impact, names none, as a fixture version. `checkVersionImpacts`
+checks that the entry a version names commits it in its change.

@@ -146,9 +146,10 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	var n domain.Node
 	var id, p, created, parents, origins string
 	var change, cnode sql.NullString
+	var logSeq sql.NullInt64
 	var owner, project, creatorUnit string
 	var version int
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &created, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility, &logSeq); err != nil {
 		return n, err
 	}
 	n.Origins = originsOf([]byte(origins))
@@ -158,6 +159,7 @@ func sqliteScanNode(row scanner) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props([]byte(p)), domain.ChangeID(change.String)
 	n.ChangeImpact = domain.ChangeImpactID(cnode.String)
+	n.LogSeq = logSeq.Int64
 	n.Responsible, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
 	n.CreatedAt = tsParse(created)
 	return n, nil
@@ -767,7 +769,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility)
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), string(originsJSON(n.Origins)), n.Committed, n.Editor, n.Visibility, nullSeq(n.LogSeq))
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -980,6 +982,15 @@ func (t *sqliteTx) NodeChangePage(ctx context.Context, node domain.NodeID, befor
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+func (t *sqliteTx) SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error {
+	if err := t.writes(); err != nil {
+		return err
+	}
+	q, args := dialectSQLite.sqlSetLogSeq(refs, seq)
+	_, err := t.tx.ExecContext(ctx, q, args...)
+	return sqliteErr(err, "versions committed")
 }
 
 func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {

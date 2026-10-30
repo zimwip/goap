@@ -401,6 +401,9 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
 				return err
 			}
+			if gt, ok := unwrapGuard(tx); ok && head.ChangeID != c.ID {
+				gt.retaken(ref, c.ID) // its log entry is the one of this commit
+			}
 		}
 		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
 	}

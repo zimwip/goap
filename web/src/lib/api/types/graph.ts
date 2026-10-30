@@ -29,6 +29,8 @@ export interface GraphNode {
   reason?: string;
   /** change impact that produced this version, and why it was accepted (ADR 0024) */
   changeImpact?: string;
+  /** position of the entry of its change's log that committed it (a change commits several times, ADR 0174; int64: a string in JSON) */
+  logSeq?: Int64;
   comment?: string;
   /** action run that wrote this version (what a relaunch marks stale) */
   execution?: string;

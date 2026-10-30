@@ -308,6 +308,28 @@ func checkVersionImpacts(ctx context.Context, tx Tx, id domain.ChangeID, events 
 			return fmt.Errorf("version %s committed for impact %s names impact %q", e.Committed, e.Impact, n.ChangeImpact)
 		}
 	}
+	// a version names an entry of its change committing it: the commit that wrote it, or the one that took it as its
+	// change's (a parent taking a sub-change's, SetNodeOrigin)
+	naming := map[domain.NodeRef]map[int64]bool{}
+	for _, e := range events {
+		if e.Op == domain.ImpactCommitted && e.Committed != nil {
+			if naming[*e.Committed] == nil {
+				naming[*e.Committed] = map[int64]bool{}
+			}
+			naming[*e.Committed][int64(e.Seq)] = true
+		}
+	}
+	for _, node := range nodes {
+		vs, err := tx.Versions(ctx, node)
+		if err != nil {
+			return err
+		}
+		for _, n := range vs {
+			if seqs, ok := naming[n.Ref()]; ok && n.ChangeID == id && !seqs[n.LogSeq] {
+				return fmt.Errorf("version %s (%s) names log entry %d, which does not commit it in its change (%v)", n.Ref(), n.Reason, n.LogSeq, seqs)
+			}
+		}
+	}
 	return nil
 }
 

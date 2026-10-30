@@ -137,6 +137,10 @@ type guardTx struct {
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
 	written map[domain.NodeRef]bool
+	// writtenBy is the change of each version it wrote or gave another origin (SetNodeOrigin)
+	writtenBy map[domain.NodeRef]domain.ChangeID
+	// sequenced are the versions it wrote that it stamped with the entry that committed them (committedAt)
+	sequenced map[domain.NodeRef]bool
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
 	// origins are the versions whose origin the transaction set: read again by the next ones once it commits
@@ -671,7 +675,38 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 		t.written = map[domain.NodeRef]bool{}
 	}
 	t.written[n.Ref()] = true
+	if t.writtenBy == nil {
+		t.writtenBy = map[domain.NodeRef]domain.ChangeID{}
+	}
+	t.writtenBy[n.Ref()] = n.ChangeID
 	return nil
+}
+
+// committedAt records the entry of the log of a change that committed versions (its committed events, ADR 0174
+// addendum) on the versions of that change they name that the transaction wrote or gave to that change, the first
+// entry naming each (a later one, a merge taking it, commits it again). A version no committed event names (a revert: it has no impact either) names none.
+func (t *guardTx) committedAt(ctx context.Context, change domain.ChangeID, seq int64, named []domain.NodeRef) error {
+	var refs []domain.NodeRef
+	for _, r := range named {
+		// an entry of the log of the version's own change (a parent recording what a sub-change merged names it too)
+		if t.writtenBy[r] == change && !t.sequenced[r] && !slices.Contains(refs, r) {
+			refs = append(refs, r)
+		}
+	}
+	if len(refs) == 0 {
+		return nil
+	}
+	if t.sequenced == nil {
+		t.sequenced = map[domain.NodeRef]bool{}
+	}
+	for _, r := range refs {
+		t.sequenced[r] = true
+		if n, ok := t.nodes[r]; ok {
+			n.LogSeq = seq
+			t.nodes[r] = n
+		}
+	}
+	return t.Tx.SetLogSeq(ctx, refs, seq)
 }
 
 func (t *guardTx) PutLinks(ctx context.Context, ls []domain.Link) error {
@@ -727,6 +762,16 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 	t.origins[ref] = true
 	t.g.versions.forgetNode(ref)
 	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
+}
+
+// retaken records that a version is now another change's (a sub-change's taken by its parent, a merge's by the
+// change merged, SetNodeOrigin): the entry of that change committing it stamps it again (committedAt).
+func (t *guardTx) retaken(ref domain.NodeRef, change domain.ChangeID) {
+	if t.writtenBy == nil {
+		t.writtenBy = map[domain.NodeRef]domain.ChangeID{}
+	}
+	t.writtenBy[ref] = change
+	delete(t.sequenced, ref)
 }
 
 // JoinCommits makes a branch take commits (ADR 0176), from the order of the commit being written on it.

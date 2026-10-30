@@ -188,6 +188,23 @@ func (g *Graph) flush(ctx context.Context, tx Tx, s *impactStage) error {
 	return nil
 }
 
+// committedAt stamps the versions a commit wrote with the position of its committed entry (guardTx.committedAt).
+func committedAt(ctx context.Context, tx Tx, seq int64, events []domain.ImpactEvent) error {
+	var named []domain.NodeRef
+	for _, e := range events {
+		if e.Op == domain.ImpactCommitted && e.Committed != nil {
+			named = append(named, *e.Committed)
+		}
+	}
+	if len(named) == 0 {
+		return nil
+	}
+	if gt, ok := unwrapGuard(tx); ok {
+		return gt.committedAt(ctx, events[0].Change, seq, named)
+	}
+	return nil
+}
+
 // emitEntry appends one log entry carrying the events (SameEntry) and applies them to the fold of the change; staged
 // (s set), it applies them and leaves the entry to flush.
 func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEvent, s *impactStage) error {
@@ -242,6 +259,9 @@ func (g *Graph) emitEntry(ctx context.Context, tx Tx, events []domain.ImpactEven
 		}
 		for i := range events {
 			events[i].Seq = int(entry.Seq)
+		}
+		if err := committedAt(ctx, tx, entry.Seq, events); err != nil {
+			return err
 		}
 	}
 	fold := holds && (s != nil || int64(events[0].Seq) > st.seq)

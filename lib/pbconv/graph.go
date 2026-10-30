@@ -100,7 +100,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 	return &graphv1.Node{Id: string(n.ID), Version: int32(n.Version), Namespace: n.Namespace, Key: n.Key, Type: n.Type, Props: Struct(n.Properties),
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
-		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
+		ChangeImpact: string(n.ChangeImpact), LogSeq: n.LogSeq, Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
 		Responsible: n.Responsible.String(), Project: n.Project.String(), Draft: n.IsDraft(), Origins: refsToPB(n.Origins),
 		Creator: n.Creator.Subject, CreatorUnit: n.Creator.Unit.String(), Editor: n.Editor, Visibility: n.Visibility}
 }

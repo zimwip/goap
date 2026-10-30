@@ -190,6 +190,9 @@ type Tx interface {
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
+	// SetLogSeq records on versions the position of the entry of the log of their change that committed them (the
+	// guard, once that entry is appended).
+	SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error
 
 	// JoinCommits makes a branch take commits of another branch as they are (a merge, ADR 0176): their versions are
 	// not copied and keep the branch they were written on, the branch holds them from the order at (the guard of the

@@ -33,8 +33,8 @@ func checkSQL(t *testing.T, name string, d dialect, got, want string) {
 }
 
 const (
-	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility`
-	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility`
+	goldPGNodeCols     = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility, v.log_seq`
+	goldSQLiteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner, n.project, v.origins, n.creator, n.creator_unit, v.editor, v.visibility, v.log_seq`
 	goldPGOnBranch     = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
 	goldSQLiteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
 	goldPGImpactCols   = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, committed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded, effect`
@@ -52,8 +52,15 @@ func TestSQLBuildersGolden(t *testing.T) {
 		}
 	}
 
+	// the entry that committed versions (ADR 0174 addendum)
+	q, a := pg.sqlSetLogSeq([]domain.NodeRef{ref}, 7)
+	seq := int64(7)
+	check("pg SetLogSeq", pg, q, a, `UPDATE node_version v SET log_seq = $1 FROM unnest($2::uuid[], $3::int[]) AS r(id, version) WHERE v.node_id = r.id AND v.version = r.version`, []any{&seq, []string{"n1"}, []int32{3}})
+	q, a = lite.sqlSetLogSeq([]domain.NodeRef{ref}, 7)
+	check("sqlite SetLogSeq", lite, q, a, `UPDATE node_version SET log_seq = ?1 WHERE (node_id, version) IN (SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?2))`, []any{&seq, `[["n1",3]]`})
+
 	// Node
-	q, a := pg.sqlNode(ref)
+	q, a = pg.sqlNode(ref)
 	check("pg Node", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = $2`, []any{"n1", 3})
 	q, a = lite.sqlNode(ref)
 	check("sqlite Node", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = ?`, []any{"n1", 3})

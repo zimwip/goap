@@ -368,6 +368,14 @@ func props(b []byte) map[string]any {
 	return m
 }
 
+// nullSeq is a position of a log, NULL for none.
+func nullSeq(seq int64) *int64 {
+	if seq == 0 {
+		return nil
+	}
+	return &seq
+}
+
 func nullUUID(s string) *string {
 	if s == "" {
 		return nil
@@ -386,12 +394,13 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
 	var id string
 	var change, cnode *string
+	var logSeq *int64
 	var owner, project, creatorUnit string
 	var p []byte
 	var version int
 	var parents []int32
 	var origins []byte
-	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility); err != nil {
+	if err := row.Scan(&id, &version, &n.Namespace, &n.Key, &n.Type, &p, &n.Deleted, &change, &n.CreatedAt, &n.Branch, &parents, &n.Reason, &n.State, &cnode, &n.Comment, &n.Execution, &owner, &project, &origins, &n.Creator.Subject, &creatorUnit, &n.Editor, &n.Visibility, &logSeq); err != nil {
 		return n, err
 	}
 	n.Origins = originsOf(origins)
@@ -400,6 +409,9 @@ func scanNode(row pgx.Row) (domain.Node, error) {
 	}
 	n.ID, n.Version, n.Properties, n.ChangeID = domain.NodeID(id), domain.Version(version), props(p), domain.ChangeID(str(change))
 	n.ChangeImpact = domain.ChangeImpactID(str(cnode))
+	if logSeq != nil {
+		n.LogSeq = *logSeq
+	}
 	n.Responsible, n.Project, n.Creator.Unit = lnk.Of(owner), lnk.Of(project), lnk.Of(creatorUnit)
 	return n, nil
 }
@@ -1168,7 +1180,7 @@ func versionArgs(n domain.Node) []any {
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	return []any{string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility}
+	return []any{string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, n.Responsible.String(), originsJSON(n.Origins), n.Committed, n.Editor, n.Visibility, nullSeq(n.LogSeq)}
 }
 
 // exec1 runs a statement that must touch exactly one row (ErrNotFound otherwise).
@@ -1510,6 +1522,15 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	return nil
+}
+
+func (t *pgTx) SetLogSeq(ctx context.Context, refs []domain.NodeRef, seq int64) error {
+	q, args := dialectPG.sqlSetLogSeq(refs, seq)
+	if t.held != nil {
+		return t.held.write(ctx, q, args, "versions committed")
+	}
+	_, err := t.tx.Exec(ctx, q, args...)
+	return mapErr(err, "versions committed")
 }
 
 func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
