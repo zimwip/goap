@@ -57,9 +57,13 @@ is taking them, as a merge takes the commits of its source.
    branch and its target hold, else the fork: the target as the branch last took it, including what the change merged
    into it before. One probe per node, `latestHeld` with the target's row asked too.
 6. **The branch as it stands** is read with every row it holds (`branchVersions`, the views of a change, the checkouts
-   of its drafts, the head kept for a change view): the head commit of a change's branch is no longer its state, the
-   selection is bounded by the branch's last order (`LastCommit`) instead of the head commit's. `BranchHead` keeps
-   answering the last commit of a branch, its history.
+   of its drafts, the head kept for a change view), over the view of its parent at its fork: a node no row of the
+   branch holds is read in its parent's view at the fork commit, itself a selection on the parent's branch up to that
+   commit's order over the parent's own fork (ADR 0143, 0175), recursively up to a lasting branch. The rows taken by a
+   rebase only add what the parent committed since the fork; the parent's view is never read as it stands now (a
+   parent moved since is taken by a rebase, never seen through). The head commit of a change's branch is no longer its
+   state: the selection is bounded by the branch's last order (`LastCommit`) instead of the head commit's.
+   `BranchHead` keeps answering the last commit of a branch, its history.
 7. **A fast-forward** is allowed when the branch holds the head of its target (point 3) and its target took nothing
    since on a node of point 4. Before the lock of the target it rebases (point 1), at the lock it reads the head
    again: a head moved meanwhile on none of the nodes of the change is taken by the branch (rows), the plan kept; a node
