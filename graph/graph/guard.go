@@ -51,9 +51,6 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		r.g.forgetSelections()
 	}
 	if err == nil {
-		for ref := range gt.origins {
-			r.g.versions.forgetNode(ref)
-		}
 		// the heads kept of the branches it moved move with it, the nodes of the keys it created known (heads.go)
 		for k, id := range gt.newKeys {
 			r.g.keyIDs.Put(k, id)
@@ -76,11 +73,11 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 			r.g.foundRefs.Put(k, true)
 		}
 		// the versions it wrote and read back are what is stored now that it committed: kept for the next readers (a
-		// link to one checks its type), but one whose origin it set
+		// link to one checks its type)
 		if len(gt.written) > 0 && !gt.purged {
 			gen := r.g.versions.generation()
 			for ref, n := range gt.nodes {
-				if gt.written[ref] && !gt.origins[ref] {
+				if gt.written[ref] {
 					kept := copyNode(n)
 					r.g.versions.update(gen, ref, func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
 				}
@@ -142,8 +139,6 @@ type guardTx struct {
 	reserved logPos
 	// nodes are the versions it read that it did not write (versioncache.go)
 	nodes map[domain.NodeRef]domain.Node
-	// origins are the versions whose origin the transaction set: read again by the next ones once it commits
-	origins map[domain.NodeRef]bool
 	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
 	// a node it writes or joins a version of (versioncache.go)
 	latestOn map[string]map[domain.NodeID]domain.Version
@@ -768,35 +763,19 @@ func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkS
 	return t.Tx.PutLinkSet(ctx, from, set)
 }
 
-func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
-	if err := t.needChange(change, "the origin of node "+ref.String()); err != nil {
-		return err
-	}
-	if logSeq == 0 {
-		return fmt.Errorf("the origin of node %s names no log entry: %w", ref, ErrInvalid)
-	}
-	if err := t.committing("the origin of node "+ref.String(), change, logSeq); err != nil {
-		return err
-	}
-	delete(t.nodes, ref)
-	if t.origins == nil {
-		t.origins = map[domain.NodeRef]bool{}
-	}
-	t.origins[ref] = true
-	t.g.versions.forgetNode(ref)
-	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment, logSeq)
-}
-
-// JoinCommits makes a branch take commits (ADR 0176), from the order of the commit being written on it.
-func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, _ int64, seqs []int64) error {
+// logSeq is the entry of the change's log recording the merge: the one reserved, or one the transaction appended.
+func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, _, logSeq int64, seqs []int64) error {
 	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
 		return err
+	}
+	if logSeq != 0 && !(t.reserved.change == change && t.reserved.seq == logSeq) && (logSeq > t.appended[change] || t.appended[change] == 0) {
+		return fmt.Errorf("the commits %s takes: log entry %d of change %s is neither reserved nor appended by the transaction: %w", branch, logSeq, change, ErrInvalid)
 	}
 	at, err := t.commitOn(ctx, branch, change)
 	if err != nil {
 		return err
 	}
-	return t.Tx.JoinCommits(ctx, branch, change, at, seqs)
+	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }
 
 // took notes a version a branch holds once it took the commits of another branch (takeCommits): what is kept of the

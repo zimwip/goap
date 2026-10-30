@@ -94,7 +94,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		if d.pg {
 			cid = "j.change_id::text"
 		}
-		check("VersionJoins", d, q, a, `SELECT v.version, j.branch, `+cid+` FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{"n1"})
+		check("VersionJoins", d, q, a, `SELECT v.version, j.branch, `+cid+`, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed WHERE v.node_id = `+p+` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{"n1"})
 	}
 
 	// NodeIDByKey
@@ -398,12 +398,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	checkSQL(t, "pg DeleteTag", pg, q, `DELETE FROM tag WHERE id = $1`)
 	q, _ = lite.sqlDeleteTag("t1")
 	checkSQL(t, "sqlite DeleteTag", lite, q, `DELETE FROM tag WHERE id = ?`)
-	checkSQL(t, "pg SetNodeOrigin", pg, pg.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5, log_seq = $6 WHERE node_id = $1 AND version = $2`)
-	checkSQL(t, "sqlite SetNodeOrigin", lite, lite.sqlSetNodeOrigin(), `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ?, log_seq = ? WHERE node_id = ? AND version = ?`)
-	q, _ = pg.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
-	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`)
-	q, _ = lite.sqlJoinCommits("main", "c1", 9, []int64{3, 4})
-	checkSQL(t, "sqlite JoinCommits", lite, q, `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`)
+	q, _ = pg.sqlJoinCommits("main", "c1", 9, 12, []int64{3, 4})
+	checkSQL(t, "pg JoinCommits", pg, q, `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`)
+	q, _ = lite.sqlJoinCommits("main", "c1", 9, 12, []int64{3, 4})
+	checkSQL(t, "sqlite JoinCommits", lite, q, `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ?1, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`)
 
 	// Inserts
 	nodeVersionCols := []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner"}

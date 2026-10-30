@@ -729,9 +729,12 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			return res, err
 		}
 	}
-	if len(writes) > 0 {
-		seq, err := tx.ReserveLogSeq(ctx, c.ID)
-		if err != nil {
+	// the entry of the commit of the merge, its position reserved first: its versions name it, the commits the target
+	// takes are recorded by it
+	var seq int64
+	if len(phases[3]) > 0 {
+		var err error
+		if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
 			return res, err
 		}
 		for _, n := range writes {
@@ -743,8 +746,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		if err := g.emitAt(ctx, tx, seq, phases[3]...); err != nil {
 			return res, err
 		}
-	} else if err := g.emit(ctx, tx, phases[3]...); err != nil {
-		return res, err
 	}
 
 	if len(stuck) > 0 {
@@ -752,7 +753,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	}
 	// the target takes the commits of the source (ADR 0176): the versions joined as they are, the others outrun by the
 	// merge's own versions, written at the same order
-	if err := takeCommits(ctx, tx, namespace, plan.Into, in.From, c.ID, joined); err != nil {
+	if err := takeCommits(ctx, tx, namespace, plan.Into, in.From, c.ID, seq, joined); err != nil {
 		return res, err
 	}
 	// 2. their links: a 3-way merge keyed by (type, target node), retargeted to the merged versions

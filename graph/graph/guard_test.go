@@ -84,7 +84,7 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		"a link without a change": func(tx Tx) error {
 			return tx.PutLinks(ctx, []domain.Link{{ID: domain.LinkID(g.newID()), Type: LinkProjectPartOf, From: proj.Ref(), To: proj.Ref()}})
 		},
-		"a branch membership without a change": func(tx Tx) error { return tx.JoinCommits(ctx, "elsewhere", "", 0, []int64{1}) },
+		"a branch membership without a change": func(tx Tx) error { return tx.JoinCommits(ctx, "elsewhere", "", 0, 0, []int64{1}) },
 		"a change without a unit": func(tx Tx) error {
 			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: g.StructureURL(domain.StructureProject, rootProject(g))})
 		},

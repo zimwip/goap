@@ -617,10 +617,12 @@ func (t *sqliteTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain
 	for rows.Next() {
 		var v int
 		var j domain.VersionJoin
-		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change)); err != nil {
+		var seq sql.NullInt64
+		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change), &seq); err != nil {
 			return nil, err
 		}
 		j.Version = domain.Version(v)
+		j.LogSeq = seq.Int64
 		out = append(out, j)
 	}
 	return out, rows.Err()
@@ -1001,19 +1003,8 @@ func (t *sqliteTx) ReserveLogSeq(ctx context.Context, _ domain.ChangeID) (int64,
 	return seq, sqliteErr(err, "log position")
 }
 
-func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
-	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment, nullSeq(logSeq))
-	if err != nil {
-		return sqliteErr(err, "node "+ref.String())
-	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return nil
-}
-
-func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
-	q, args := dialectSQLite.sqlJoinCommits(branch, change, at, seqs)
+func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
+	q, args := dialectSQLite.sqlJoinCommits(branch, change, at, logSeq, seqs)
 	_, err := t.tx.ExecContext(ctx, q, args...)
 	return sqliteErr(err, "branch "+branch)
 }

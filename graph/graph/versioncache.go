@@ -11,8 +11,7 @@ import (
 )
 
 // versionCache keeps what never changes once a version is written (ADR 0079, 0141): the version, how it holds its links
-// and the links it holds (the origin of a version is set again at a merge, SetNodeOrigin: the version is then read
-// again, and the reads in flight are not kept). A commit or a merge of N nodes reads them for the versions it starts from: read once, in one batch,
+// and the links it holds (a version is never rewritten, a merge included, ADR 0174 addendum). A commit or a merge of N nodes reads them for the versions it starts from: read once, in one batch,
 // they are not read again by the next operations on the same nodes. Only a version read by a transaction that did not
 // write it is kept (what a transaction wrote may roll back, its number then taken again). A purge deletes versions
 // (DeleteChange): it empties the cache, before and after its transaction, and a read that started before an emptying
@@ -129,8 +128,7 @@ func (t *guardTx) known(gen uint64, ref domain.NodeRef) {
 	t.g.versions.update(gen, ref, func(e *versionEntry) { e.exists = true })
 }
 
-// Node reads a version: an exact one the transaction did not write once, kept between transactions (but when its origin
-// is set, SetNodeOrigin).
+// Node reads a version: an exact one the transaction did not write once, kept between transactions.
 func (t *guardTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error) {
 	if ref.Version > 0 && t.written[ref] {
 		// a version it wrote, read back in a batch (prefetch): kept for the transaction only
@@ -162,10 +160,6 @@ func (t *guardTx) keepNode(gen uint64, n domain.Node) {
 		t.nodes = map[domain.NodeRef]domain.Node{}
 	}
 	t.nodes[n.Ref()] = n
-	if t.origins[n.Ref()] {
-		t.known(gen, n.Ref())
-		return
-	}
 	kept := copyNode(n)
 	t.g.versions.update(gen, n.Ref(), func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
 }

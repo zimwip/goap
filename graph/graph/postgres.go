@@ -999,10 +999,14 @@ func (t *pgTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.Ver
 	for rows.Next() {
 		var v int
 		var j domain.VersionJoin
-		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change)); err != nil {
+		var seq *int64
+		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change), &seq); err != nil {
 			return nil, err
 		}
 		j.Version = domain.Version(v)
+		if seq != nil {
+			j.LogSeq = *seq
+		}
 		out = append(out, j)
 	}
 	return out, rows.Err()
@@ -1524,17 +1528,6 @@ func (t *pgTx) NodeChangePage(ctx context.Context, node domain.NodeID, before in
 	return out, rows.Err()
 }
 
-func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
-	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment, nullSeq(logSeq))
-	if err != nil {
-		return mapErr(err, "node "+ref.String())
-	}
-	if tag.RowsAffected() != 1 {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	return nil
-}
-
 // ReserveLogSeq takes the position the lock of the change read ahead when no entry took it yet (lockedHead), else
 // one of the sequence.
 func (t *pgTx) ReserveLogSeq(ctx context.Context, id domain.ChangeID) (int64, error) {
@@ -1546,8 +1539,8 @@ func (t *pgTx) ReserveLogSeq(ctx context.Context, id domain.ChangeID) (int64, er
 	return seq, mapErr(err, "log position")
 }
 
-func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
-	q, args := dialectPG.sqlJoinCommits(branch, change, at, seqs)
+func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
+	q, args := dialectPG.sqlJoinCommits(branch, change, at, logSeq, seqs)
 	if t.held != nil {
 		return t.held.write(ctx, q, args, "branch commits")
 	}

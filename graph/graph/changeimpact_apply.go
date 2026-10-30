@@ -362,7 +362,11 @@ func joinSorted(s []string) string {
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
 // heads, when given, are the nodes as the target holds them now (a fast-forward read them before it locked the target):
 // nothing is read of the target then.
-func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool, heads map[domain.NodeID]domain.Node) error {
+// The versions are never rewritten (ADR 0174 addendum): a version keeps the change, the impact and the entry that wrote
+// it, the branch taking it records the merge (branch_commit). seq, when set, is the position reserved for the entry
+// (the one the commits the target took name); then the reverts among moved, which no impact of the view holds, are
+// named by it too, for the impact they revert.
+func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.CommitID, only map[domain.NodeID]bool, heads map[domain.NodeID]domain.Node, seq int64, moved []domain.NodeRef) error {
 	commits := func(cn domain.ChangeImpact) bool {
 		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Committed != nil) && cn.Flow == "" && !cn.Superseded &&
 			(only == nil || only[cn.Post.ID])
@@ -375,14 +379,15 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 		}
 	}
 	var committed []domain.ImpactEvent
-	var seq int64 // the position of the entry of the commit, reserved when it gives a version to the change
 	for _, cn := range c.Impacts().All() {
 		if !commits(cn) {
 			continue
 		}
 		post := *cn.Post
-		if post.IsDraft() && cn.Committed != nil {
-			post = *cn.Committed // checked out again after its commit, left as it was (ADR 0102)
+		if cn.Committed != nil {
+			// its last commit: checked out again since, left as it was (ADR 0102); a sub-change's version taken by the
+			// parent, which keeps its change (ADR 0174 addendum)
+			post = *cn.Committed
 		}
 		head, ok := byID[post.ID]
 		if !ok {
@@ -392,31 +397,30 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 			continue // left as is on the target: nothing of this change committed
 		}
 		ref := head.Ref()
-		comment := cn.Rationale
-		if len(cn.Reviews) > 0 {
-			comment = cn.Reviews[len(cn.Reviews)-1].Comment
-		}
-		// a version the change wrote itself already names it (a fast-forward): rewriting the row would only cost a new
-		// tuple and its index entries
-		if head.ChangeID != c.ID || head.ChangeImpact != cn.ID || head.Comment != comment {
-			// the version is now this change's, committed by the entry of this commit: its position reserved first
-			if seq == 0 {
-				var err error
-				if seq, err = tx.ReserveLogSeq(ctx, c.ID); err != nil {
-					return err
-				}
-			}
-			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment, seq); err != nil {
-				return err
-			}
-		}
 		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
 	}
-	// one entry for the commit (ADR 0144)
-	if seq != 0 {
-		return g.emitAt(ctx, tx, seq, committed...)
+	if seq == 0 {
+		// one entry for the commit (ADR 0144)
+		return g.emit(ctx, tx, committed...)
 	}
-	return g.emit(ctx, tx, committed...)
+	named := make(map[domain.NodeRef]bool, len(committed))
+	for _, e := range committed {
+		named[*e.Committed] = true
+	}
+	for _, r := range moved {
+		if named[r] {
+			continue
+		}
+		n, err := tx.Node(ctx, r)
+		if err != nil {
+			return err
+		}
+		if n.Reason == domain.ReasonRevert && n.ChangeID == c.ID {
+			ref := n.Ref()
+			committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
+		}
+	}
+	return g.emitAt(ctx, tx, seq, committed...)
 }
 
 // targetNodes reads the latest version on the target of each node of a change that commits, in two statements.

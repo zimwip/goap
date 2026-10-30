@@ -189,9 +189,6 @@ type Tx interface {
 	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
 	// history, whatever its length; ADR 0174: committed or not, read from the log).
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
-	// SetNodeOrigin records on a node version the change and change impact that produced it, its comment and the
-	// position of the entry of the log of that change committing it.
-	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error
 	// ReserveLogSeq reserves the position the next entry of the log of a change takes: the versions a commit writes
 	// name the entry committing them as they are written (node_version.log_seq), the entry appended after them with
 	// that position (AppendLog with e.Seq set).
@@ -200,8 +197,10 @@ type Tx interface {
 	// JoinCommits makes a branch take commits of another branch as they are (a merge, ADR 0176): their versions are
 	// not copied and keep the branch they were written on, the branch holds them from the order at (the guard of the
 	// graph sets it, ADR 0140). change is the change whose merge makes it take them (ADR 0054: no membership without a
-	// change); a commit the branch took already keeps the order it was taken at.
-	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error
+	// change), logSeq the entry of that change's log recording it (0: none, a commit of the branch's own or a move of
+	// its fork); a commit the branch took already keeps the order it was taken at. A version is never rewritten when a
+	// branch takes it: the row is the record of the integration (ADR 0174 addendum).
+	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error
 	// JoinedCommits lists the orders of the commits a branch took from the order after up to upTo.
 	JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error)
 

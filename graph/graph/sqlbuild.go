@@ -197,7 +197,7 @@ func (d dialect) sqlVersionBranches(id domain.NodeID, from domain.Version) (stri
 // sqlVersionJoins reads the branches that took the commits of the versions of a node and the changes whose merge made
 // them take them (ADR 0133, 0176).
 func (d dialect) sqlVersionJoins(id domain.NodeID) (string, []any) {
-	return `SELECT v.version, j.branch, ` + d.id("j.change_id") + ` FROM node_version v JOIN branch_commit j ON j.seq = v.committed
+	return `SELECT v.version, j.branch, ` + d.id("j.change_id") + `, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed
 		WHERE v.node_id = ` + d.ph(1) + ` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{string(id)}
 }
 
@@ -288,16 +288,16 @@ func (d dialect) sqlJoinedCommits(branch string, after, upTo int64) (string, []a
 		[]any{domain.BranchOf(branch), after, upTo}
 }
 
-// sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, then the list of their orders; a
-// commit the branch took already keeps the order it was taken at.
-func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at int64, seqs []int64) (string, []any) {
+// sqlJoinCommits makes a branch take commits (ADR 0176): arguments branch, change, at, the log entry recording it, then
+// the list of their orders; a commit the branch took already keeps the order it was taken at.
+func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) (string, []any) {
 	if d.pg {
-		return `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT $1, s, $3, $2 FROM unnest($4::bigint[]) AS s ON CONFLICT DO NOTHING`,
-			[]any{domain.BranchOf(branch), string(change), at, seqs}
+		return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`,
+			[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), seqs}
 	}
 	b, _ := json.Marshal(seqs)
-	return `INSERT INTO branch_commit (branch, seq, at, change_id) SELECT ?1, value, ?3, ?2 FROM json_each(?4) WHERE true ON CONFLICT DO NOTHING`,
-		[]any{domain.BranchOf(branch), string(change), at, string(b)}
+	return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ?1, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`,
+		[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), string(b)}
 }
 
 func nodeIDStrings(ids []domain.NodeID) []string {
@@ -796,12 +796,6 @@ func (d dialect) sqlDeleteTag(id domain.TagID) (string, []any) {
 // sqlLinkByID reads one link.
 func (d dialect) sqlLinkByID(id domain.LinkID) (string, []any) {
 	return `SELECT ` + d.linkCols() + ` FROM link WHERE id = ` + d.ph(1) + ` AND removes IS NULL`, []any{string(id)}
-}
-
-// sqlSetNodeOrigin sets the origin of a version: arguments node, version, change, change impact, comment, the position
-// of the log entry committing it.
-func (d dialect) sqlSetNodeOrigin() string {
-	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + `, log_seq = ` + d.ph(6) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
 // deleteChangeUsed are the counts that must be zero for a change to be deleted: what it wrote is used by nothing it

@@ -76,7 +76,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	c.Status = domain.ChangeApplied
 	c.LandedCommit = res.Commit.ID
-	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Commit.ID, nil, nil); err != nil {
+	if err := g.commit(ctx, tx, c, own, res.Change.ID, res.Commit.ID, nil, nil, 0, nil); err != nil {
 		return c, err
 	}
 	g.raiseMerged(ctx, tx, c, own.Parent, &res.Commit, res.merged)
@@ -508,8 +508,13 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 			return true, g.closeMerged(ctx, tx, c, own, target)
 		}
 	}
-	// the target takes the commits of the branch (ADR 0176): one row per commit, the versions they wrote as they are
-	if err := takeCommits(ctx, tx, own.Namespace, target, own.Name, c.ID, moves); err != nil {
+	// the target takes the commits of the branch (ADR 0176): one row per commit, the versions they wrote as they are,
+	// recorded by the committed entry of the change, its position reserved first
+	seq, err := tx.ReserveLogSeq(ctx, c.ID)
+	if err != nil {
+		return false, err
+	}
+	if err := takeCommits(ctx, tx, own.Namespace, target, own.Name, c.ID, seq, moves); err != nil {
 		return false, err
 	}
 	// the impacts whose node this merge moves record their version on the target, the ones merged before kept
@@ -526,7 +531,7 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 	}
 	if to.parent.Ephemeral {
 		// the branch of the parent holds what the sub-change committed, its impacts committed there (recordInParent)
-		if err := g.commit(ctx, tx, c, own, c.ID, "", only, nil); err != nil {
+		if err := g.commit(ctx, tx, c, own, c.ID, "", only, nil, seq, moves); err != nil {
 			return false, err
 		}
 		// the parent's branch records the merge as a commit of its own (ADR 0175)
@@ -556,7 +561,7 @@ func (g *Graph) applyFastForward(ctx context.Context, tx Tx, ff fastForwardPlan,
 		return false, err
 	}
 	c.LandedCommit = res.ID
-	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only, ff.heads); err != nil {
+	if err := g.commit(ctx, tx, c, own, c.ID, res.ID, only, ff.heads, seq, moves); err != nil {
 		return false, err
 	}
 	if err := g.raiseMergedRefs(ctx, tx, c, target, &res, moves); err != nil {

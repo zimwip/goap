@@ -182,6 +182,7 @@ type joinKey struct {
 type memJoin struct {
 	change domain.ChangeID
 	at     int64
+	logSeq int64
 }
 
 // on reports whether a version is part of a branch: of a commit the branch holds.
@@ -811,7 +812,8 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 	var out []domain.VersionJoin
 	for _, v := range t.st.versions[id] {
 		for _, k := range t.takers(v) {
-			out = append(out, domain.VersionJoin{Version: v.Version, Branch: k.branch, Change: t.st.joins[k].change})
+			j := t.st.joins[k]
+			out = append(out, domain.VersionJoin{Version: v.Version, Branch: k.branch, Change: j.change, LogSeq: j.logSeq})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -925,18 +927,6 @@ func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int
 	return out, nil
 }
 
-func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string, logSeq int64) error {
-	if err := t.write(); err != nil {
-		return err
-	}
-	vs := t.st.versions[ref.ID]
-	if ref.Version < 1 || int(ref.Version) > len(vs) {
-		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
-	}
-	vs[ref.Version-1].ChangeID, vs[ref.Version-1].ChangeImpact, vs[ref.Version-1].Comment, vs[ref.Version-1].LogSeq = change, cn, comment, logSeq
-	return nil
-}
-
 func (t *memTx) ReserveLogSeq(_ context.Context, _ domain.ChangeID) (int64, error) {
 	if err := t.write(); err != nil {
 		return 0, err
@@ -944,14 +934,14 @@ func (t *memTx) ReserveLogSeq(_ context.Context, _ domain.ChangeID) (int64, erro
 	return int64(len(t.st.log) + 1), nil
 }
 
-func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at int64, seqs []int64) error {
+func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
 	if err := t.write(); err != nil {
 		return err
 	}
 	branch = domain.BranchOf(branch)
 	for _, seq := range seqs {
 		if _, ok := t.st.joins[joinKey{branch, seq}]; !ok {
-			t.st.joins[joinKey{branch, seq}] = memJoin{change: change, at: at}
+			t.st.joins[joinKey{branch, seq}] = memJoin{change: change, at: at, logSeq: logSeq}
 		}
 	}
 	return nil

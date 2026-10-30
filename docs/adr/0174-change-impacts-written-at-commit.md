@@ -115,9 +115,18 @@ the versions naming it, then appends the entry at that position (`Graph.emitAt`,
 `UPDATE` of a version. The guard holds it so (`guardTx.reserved`): one reservation at a time, nothing else appended
 until the entry takes it, every version of that change written meanwhile naming it, none naming a position not
 reserved, no reservation left at the end of the transaction. The commit of a change, a merge (its versions written
-once its impacts are declared and reviewed, before the entry of its commit), the reverts written again over a moved
-fork (`refreshReverts`, the entry of the `rebase` commit) and a version another change takes as its own
-(`SetNodeOrigin` with the position, in its one `UPDATE`: a parent taking a sub-change's) all write so. A revert
+once its impacts are declared and reviewed, before the entry of its commit) and the reverts written again over a moved
+fork (`refreshReverts`, the entry of the `rebase` commit) all write so.
+
+No version is rewritten when a branch takes it (by default nothing is updated): `SetNodeOrigin` is gone. A version keeps
+the change, the impact and the entry that wrote it, a sub-change's version taken by its parent included; the merge of
+a three-way merge keeps the merge change that wrote it. The integration is the row of `branch_commit` (migration
+`0032_branch_commit_log_seq`, both dialects): `change_id` the change whose merge made the branch take the commit,
+`log_seq` the entry of that change's log recording it (`Tx.JoinCommits(..., logSeq, ...)`; a fast-forward reserves the
+position of the committed entry of the change before it takes the commits, the reverts it carries named by it too; a
+three-way merge, its merge change's committed entry; a commit of the branch's own, the entry committing its versions;
+none for a move of a fork), read with the version by `Tx.VersionJoins` (`domain.VersionJoin.LogSeq`). The guard
+accepts a position reserved or appended by the transaction only. A revert
 commits for the impact withdrawn (`withdrawnImpacts`: the last withdrawn impact of the node, from the log; written
 again, the impact of the revert it replaces): it names it and the `committed` entry of its commit names the revert,
 which the view of the change, holding the impact no more, leaves aside. `checkVersionImpacts` checks that every version

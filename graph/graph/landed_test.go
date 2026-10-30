@@ -77,8 +77,22 @@ func testCommitted(t *testing.T, repo Repo) {
 	if len(ev) != 2 || ev[0].Impact != ev[1].Impact || ev[1].Branch != domain.MainBranch {
 		t.Fatalf("the parent holds the sub-change's commit on its branch, then commits it on main: %+v", ev)
 	}
-	if n, err := g.NodeByKey(ctx, "", "L-2"); err != nil || n.Properties["title"] != "t" || n.ChangeID != parent.ID {
+	// the version keeps the change that wrote it; the branches that took it name the changes whose merge took it, and
+	// the entry of their log recording it (ADR 0174 addendum: no version is rewritten)
+	n, err := g.NodeByKey(ctx, "", "L-2")
+	if err != nil || n.Properties["title"] != "t" || n.ChangeID != sub.ID || n.ChangeImpact != added[0].ID {
 		t.Fatalf("L-2 on main = %+v, %v", n, err)
+	}
+	var joins []domain.VersionJoin
+	if err := g.repo.InTx(ctx, func(tx Tx) error { joins, err = tx.VersionJoins(ctx, n.ID); return err }); err != nil {
+		t.Fatal(err)
+	}
+	took := map[domain.ChangeID]int64{}
+	for _, j := range joins {
+		took[j.Change] = j.LogSeq
+	}
+	if took[sub.ID] == 0 || took[parent.ID] == 0 {
+		t.Fatalf("the branches of the parent and of main took L-2's commit, by an entry of the sub-change and of the parent: %+v", joins)
 	}
 }
 
