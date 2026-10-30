@@ -295,8 +295,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_commit = excluded.head_commit, description = excluded.description,
-			fork_commit = excluded.fork_commit, rebased_from = excluded.rebased_from, parent = excluded.parent`,
+		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, description = excluded.description,
+			fork_commit = excluded.fork_commit, rebased_from = excluded.rebased_from, parent = excluded.parent
+		WHERE branch.status IS NOT excluded.status OR branch.description IS NOT excluded.description OR branch.fork_commit IS NOT excluded.fork_commit
+			OR branch.rebased_from IS NOT excluded.rebased_from OR branch.parent IS NOT excluded.parent`,
 		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return sqliteErr(err, "branch "+b.Name)
 }

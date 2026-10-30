@@ -143,3 +143,18 @@ read on the key of `node_version` (`Tx.LatestVersions`, `max(version)`), and two
 version meet on that key (`ErrConflict`), as they met on the compare-and-set of the counter before. The `node` row is
 inserted with the first version and never written again: what it holds (key, type, project, creator) is the node's
 for good.
+
+A commit never updates its branch either: the head of a branch is the search of its last commit, by order
+(`dialect.branchHead`: the commit of the greatest `seq` whose `branch` is the branch's, over the index `commit_branch`,
+else the head the branch was created with, `head_commit`, which no commit writes any more). Its history is linear by a
+key, not by a compare-and-set: two commits of one branch never stand on the same parent (unique index `commit_parent`
+on `(namespace, branch, parent_id)`, migration `0034_branch_head_searched`, both dialects); `advanceBranch` keeps the
+lock of the branch, which orders its commits (`at`), and accepts the head it reads being the commit just written. The
+branch row is written again only when what it says changes (status, description, fork, parent): an upsert that would
+restate it writes nothing.
+
+The lock of a branch is held to the end of the transaction that takes it, so a merge keeps what it does under it short
+(ADR 0127): the plan is read before; under the lock, a head that moved meanwhile on none of the nodes the branch holds
+(`reforkFastForward`: the nodes the commits of the target committed since the head planned, a few) keeps the plan, the
+fork moved once more onto the head that stands; the headers it writes (branch, commit, a change whose header the
+transaction holds) go with the next statement (`heldQuerier.write`) rather than one round trip each.

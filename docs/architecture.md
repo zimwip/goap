@@ -1219,7 +1219,7 @@ node_version(node_id, version, props jsonb, deleted bool, change_id → change, 
 link(id uuid, type, from_id, from_version, to_id, to_version, to_url, props jsonb, change_id → change)  -- to_url: a target in another source (ADR 0154), to_id / to_version null then
 branch_commit(branch, seq, at, change_id → change, log_seq)  -- the commits a branch holds: its own (at = seq) and the ones it took from another branch (a merge), from the order at of that merge; PK (branch, seq) (ADR 0176); log_seq: the entry of change_id's log recording it, the record of the integration (a version is never rewritten, ADR 0174 addendum)
 commits(id uuid, name, namespace, branch, parent_id, merged_from, rebased_from, change_id, kind, created_at, seq, fork_commit)  -- seq: the order of commits; its state is a selection (ADR 0143) over fork_commit, the commit its branch stood on; every branch's commits, a change's included (ADR 0175)
-branch(namespace, name, parent, fork_commit, head_commit, origin, status, created_at)  -- PK (namespace, name)
+branch(namespace, name, parent, fork_commit, head_commit, origin, status, created_at)  -- PK (namespace, name); the head is the last commit of the branch by seq (commit_parent: one commit per parent on a branch), head_commit only the head a branch was created with (ADR 0174 addendum)
 change(id uuid, title, intent, status, fork_commit, goal, methodology, landed_commit, data jsonb,
        owner_org, project_id)  -- never empty (ADR 0054)
 change_log(seq, id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload jsonb, node)  -- facts, journal records, impact events (ADR 0030); causation: the entry it follows from (ADR 0105); node: the node of an impact entry of one event (ADR 0174)

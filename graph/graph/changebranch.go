@@ -302,6 +302,12 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, err
 	} else if now.head != ck.to.head {
 		if ff.ok {
+			if ok, err := g.reforkFastForward(ctx, tx, &ff, ck, now); err != nil || ok {
+				if err != nil {
+					return false, err
+				}
+				return g.applyFastForward(ctx, tx, ff, closing)
+			}
 			c, own = ff.c, ff.own
 		}
 		if ck, err = g.checkFastForward(ctx, tx, c, own); err != nil {
@@ -317,6 +323,53 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, nil
 	}
 	return g.applyFastForward(ctx, tx, ff, closing)
+}
+
+// reforkFastForward keeps a fast-forward prepared when its target moved at the lock on none of the nodes the branch
+// holds: the plan stands, the fork of the branch moved onto the head that stands (a second rebase commit, as
+// finishFastForward does), reading only the nodes the target committed since the head planned. False: read the plan
+// again (a node the branch holds moved, a revert to write again over the new fork, a target with no lasting order).
+func (g *Graph) reforkFastForward(ctx context.Context, tx Tx, ff *fastForwardPlan, ck fastForwardCheck, now onto) (bool, error) {
+	if now.parent.Ephemeral || ck.to.head == "" || now.head == "" {
+		return false, nil
+	}
+	for _, l := range ck.raw {
+		if l.Revert {
+			return false, nil
+		}
+	}
+	from, err := headerOf(ctx, tx, ck.to.head)
+	if err != nil {
+		return false, err
+	}
+	to, err := headerOf(ctx, tx, now.head)
+	if err != nil {
+		return false, err
+	}
+	if to.Seq <= from.Seq || domain.BranchOf(to.Branch) != domain.BranchOf(from.Branch) {
+		return false, nil
+	}
+	// the commits of the target meanwhile, a few: what they committed, against the nodes the branch holds
+	moved, err := tx.CommittedVersions(ctx, to.Namespace, domain.BranchOf(to.Branch), from.Seq, to.Seq, nil)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ck.ids {
+		if _, ok := moved[id]; ok {
+			return false, nil
+		}
+	}
+	own := ff.own
+	if err := g.moveFork(ctx, tx, ff.c.ID, &own, now); err != nil {
+		return false, err
+	}
+	g.raiseRebased(ctx, tx, ff.c.ID, own.Name, nil)
+	c, err := tx.Change(ctx, ff.c.ID)
+	if err != nil {
+		return false, err
+	}
+	ff.c, ff.own, ff.to = c, own, now
+	return true, nil
 }
 
 // prepareAttempts is how many times a fast-forward reads its plan again when the target moved before it locks it.

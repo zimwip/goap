@@ -2,6 +2,8 @@ package graph
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -548,7 +550,7 @@ func (t *pgTx) lockedHead(ctx context.Context, id domain.ChangeID) (string, erro
 				ob.b_namespace, ob.b_name, ob.b_parent, ob.b_fork, ob.b_head, ob.b_origin, ob.b_status, ob.b_created,
 				ob.b_description, ob.b_intent, ob.b_rebased, ob.b_ephemeral
 			FROM change LEFT JOIN LATERAL (SELECT b.namespace AS b_namespace, b.name AS b_name, b.parent AS b_parent,
-				coalesce(b.fork_commit::text, '') AS b_fork, coalesce(b.head_commit::text, '') AS b_head,
+				coalesce(b.fork_commit::text, '') AS b_fork, `+dialectPG.branchHead("b")+` AS b_head,
 				b.origin AS b_origin, b.status AS b_status, b.created_at AS b_created, b.description AS b_description,
 				b.intent AS b_intent, coalesce(b.rebased_from::text, '') AS b_rebased, b.ephemeral AS b_ephemeral
 				FROM branch b WHERE b.namespace = change.namespace AND b.name = change.branch) ob ON true
@@ -638,10 +640,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.unheld().Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_commit = EXCLUDED.head_commit, description = EXCLUDED.description,
-			fork_commit = EXCLUDED.fork_commit, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
+	const q = `INSERT INTO branch (namespace, name, parent, fork_commit, head_commit, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, description = EXCLUDED.description,
+			fork_commit = EXCLUDED.fork_commit, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent
+		WHERE (branch.status, branch.description, branch.fork_commit, branch.rebased_from, branch.parent) IS DISTINCT FROM
+			(EXCLUDED.status, EXCLUDED.description, EXCLUDED.fork_commit, EXCLUDED.rebased_from, EXCLUDED.parent)`
+	args := []any{namespace, b.Name, b.Parent, nullUUID(string(b.ForkCommit)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral}
+	if t.held != nil {
+		// no answer but its error: sent with the next statement
+		return t.held.write(ctx, q, args, "branch "+b.Name)
+	}
+	_, err := t.tx.Exec(ctx, q, args...)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -1264,26 +1273,44 @@ func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domai
 
 // PutCommit stores the header of a commit (ADR 0143).
 func (t *pgTx) PutCommit(ctx context.Context, b domain.Commit) error {
-	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("commits", commitColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.Fork)))
+	q := dialectPG.sqlInsert("commits", commitColumns, "")
+	args := []any{string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.Fork))}
+	if t.held != nil {
+		return t.held.write(ctx, q, args, "commit")
+	}
+	_, err := t.tx.Exec(ctx, q, args...)
 	return mapErr(err, "commit")
 }
 
-func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
-	delete(t.locked, c.ID)
-	// the header stored is the change's now, the transaction holding its lock (guardTx.PutChange): what it reads of it next
-	h, err := scanPGChangeHead(t.unheld().QueryRow(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, fork_commit, landed_commit, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
+// sqlPutChange writes the header of a change: a change stored keeps its creation, namespace and owner unit.
+const sqlPutChange = `INSERT INTO change (id, title, intent, methodology, goal, status, fork_commit, landed_commit, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version, stats)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  landed_commit = EXCLUDED.landed_commit, data = EXCLUDED.data, fork_commit = EXCLUDED.fork_commit, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
-		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version, stats = EXCLUDED.stats
-		RETURNING `+pgChangeHead,
-		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.ForkCommit)), nullUUID(string(c.LandedCommit)), jsonb(c.Data), c.CreatedAt,
-		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion, statsJSON(c.Stats)).Scan)
+		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version, stats = EXCLUDED.stats`
+
+func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
+	prev, known := t.locked[c.ID]
+	delete(t.locked, c.ID)
+	args := []any{string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.ForkCommit)), nullUUID(string(c.LandedCommit)), jsonb(c.Data), c.CreatedAt,
+		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion, statsJSON(c.Stats)}
+	// the header stored is the change's now, the transaction holding its lock (guardTx.PutChange): what it reads of it next
+	var h domain.Change
+	var err error
+	if known && t.held != nil {
+		// a header the transaction holds already: what the write stores is known, the write goes with the next statement
+		h, err = scanPGChangeHead(func(dest ...any) error { return scanArgs(dest, storedChangeArgs(args, prev)) })
+		if err == nil {
+			err = t.held.write(ctx, sqlPutChange, args, "change")
+		}
+	} else {
+		h, err = scanPGChangeHead(t.unheld().QueryRow(ctx, sqlPutChange+` RETURNING `+pgChangeHead, args...).Scan)
+		err = mapErr(err, "change")
+	}
 	if err != nil {
-		return mapErr(err, "change")
+		return err
 	}
 	if t.locked == nil {
 		t.locked = map[domain.ChangeID]domain.Change{}
@@ -1295,6 +1322,77 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 			t.roots.keep(c.ID, string(c.ID))
 		} else if root, ok := t.roots.get(c.ParentID); ok {
 			t.roots.keep(c.ID, root)
+		}
+	}
+	return nil
+}
+
+// storedChangeArgs are the values of a change header as the row holds them once sqlPutChange wrote args over the
+// header prev: its creation, namespace and owner unit kept, the ids that are none as empty.
+func storedChangeArgs(args []any, prev domain.Change) []any {
+	out := slices.Clone(args)
+	out[9], out[11], out[13] = prev.CreatedAt, domain.NamespaceOf(prev.Namespace), prev.OwnerOrg
+	for _, i := range []int{6, 12} { // COALESCE(fork_commit, ''), COALESCE(parent_id, '')
+		if p, ok := out[i].(*string); ok && p == nil {
+			out[i] = ""
+		}
+	}
+	return out
+}
+
+// scanArgs scans values held in memory as a row would give them: each through its text, JSON or SQL form.
+func scanArgs(dest, vals []any) error {
+	if len(dest) != len(vals) {
+		return fmt.Errorf("scan %d values into %d columns", len(vals), len(dest))
+	}
+	for i, v := range vals {
+		if vr, ok := v.(driver.Valuer); ok {
+			var err error
+			if v, err = vr.Value(); err != nil {
+				return err
+			}
+		}
+		if p, ok := v.(*string); ok {
+			if p == nil {
+				v = nil
+			} else {
+				v = *p
+			}
+		}
+		switch d := dest[i].(type) {
+		case sql.Scanner:
+			if err := d.Scan(v); err != nil {
+				return err
+			}
+		case *string:
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("scan %T into a string", v)
+			}
+			*d = s
+		case **string:
+			if v == nil {
+				*d = nil
+			} else if s, ok := v.(string); ok {
+				*d = &s
+			} else {
+				return fmt.Errorf("scan %T into a string", v)
+			}
+		case *[]byte:
+			b, ok := v.([]byte)
+			if !ok && v != nil {
+				return fmt.Errorf("scan %T into bytes", v)
+			}
+			*d = b
+		case *time.Time:
+			tm, ok := v.(time.Time)
+			if !ok {
+				return fmt.Errorf("scan %T into a time", v)
+			}
+			// the row keeps microseconds, in UTC
+			*d = tm.Round(time.Microsecond)
+		default:
+			return fmt.Errorf("scan into %T", dest[i])
 		}
 	}
 	return nil
