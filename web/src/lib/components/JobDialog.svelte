@@ -1,15 +1,18 @@
 <script lang="ts">
   // The detail of one job (ADR 0149), opened by a click on a job wherever it is listed (status bar, Jobs tab): its
   // progress, its facts and parameters, its counters, its error, the file it wrote, the change it created and its whole
-  // log, live from the job stream while it runs.
+  // log, live from the job stream while it runs; the form of the request it waits on, answered here by its person.
   import type { Job } from '../api';
   import { errorMessage } from '../api';
   import Icon from '../shell/Icon.svelte';
   import StatusBadge from './StatusBadge.svelte';
   import { openTab } from '../shell/tabs.svelte';
   import { notify } from '../shell/workbench.svelte';
-  import { cancelJob, downloadJobResult, knownJobs } from '../stores/jobs.svelte';
-  import { fraction, isActive, jobChange, jobFacts, jobTitle, logLines, paramLines, remaining, size } from '../jobView';
+  import { answerJob, cancelJob, downloadJobResult, knownJobs } from '../stores/jobs.svelte';
+  import { fraction, isActive, jobChange, jobFacts, jobTitle, logLines, paramLines, pendingRequest, remaining, size } from '../jobView';
+  import FormRenderer from '../forms/FormRenderer.svelte';
+  import type { FormValues } from '../forms/types';
+  import { me } from '../stores/session.svelte';
 
   let { job: given, onclose }: { job: Job; onclose?: () => void } = $props();
 
@@ -23,6 +26,11 @@
   const params = $derived(paramLines(job));
   const counters = $derived(Object.entries(job.stats ?? {}));
   const lines = $derived(logLines(job));
+  const asked = $derived(pendingRequest(job));
+  /** only the person the job runs for answers it */
+  const mine = $derived(!!job.by && job.by === me());
+  let answering = $state(false);
+  let answerError = $state('');
   let busy = $state(false);
   let logBox = $state<HTMLElement | undefined>();
   /** the log follows its newest line while the person has not scrolled up */
@@ -52,6 +60,19 @@
       notify(errorMessage(e), 'error');
     } finally {
       busy = false;
+    }
+  }
+
+  async function answer(values: FormValues) {
+    if (!asked) return;
+    answering = true;
+    answerError = '';
+    try {
+      await answerJob(job, asked.id, values);
+    } catch (e) {
+      answerError = errorMessage(e);
+    } finally {
+      answering = false;
     }
   }
 
@@ -86,6 +107,18 @@
       {#if job.status === 'queued'}<p class="hint">Waiting for a worker.</p>{/if}
       {#if job.cancelRequested && active}<p class="hint">Stopping…</p>{/if}
       {#if job.error}<div class="alert small line">{job.error}</div>{/if}
+      {#if asked}
+        <section class="ask" aria-label="Question of the job">
+          {#if mine}
+            <p class="hint">The job waits for your answer to go on.</p>
+            {#key asked.id}
+              <FormRenderer form={asked.form} busy={answering} serverError={answerError} onsubmit={(v) => void answer(v)} submitLabel={asked.form.submit || 'Answer'} />
+            {/key}
+          {:else}
+            <p class="hint">Waiting for {job.by} to answer: {asked.form.title || 'a question'}.</p>
+          {/if}
+        </section>
+      {/if}
 
       <dl class="facts">
         {#each facts as f (f.label)}
@@ -210,6 +243,15 @@
   .body h3 {
     margin: 0.4rem 0 0;
     font-size: 0.85rem;
+  }
+  .ask {
+    padding: 0.4rem 0.7rem 0.6rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .ask .hint {
+    margin: 0;
   }
   .line {
     margin: 0;

@@ -161,6 +161,11 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
         "required": true
       },
       {
+        "name": "labels",
+        "type": "strings",
+        "description": "what each option shows, in the order of the options (default: the value)"
+      },
+      {
         "name": "min",
         "type": "number",
         "description": "fewest values"
@@ -280,6 +285,11 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
         "type": "strings",
         "description": "the values offered",
         "required": true
+      },
+      {
+        "name": "labels",
+        "type": "strings",
+        "description": "what each option shows, in the order of the options (default: the value)"
       }
     ]
   },

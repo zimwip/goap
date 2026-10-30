@@ -213,6 +213,10 @@ type Tx interface {
 	// except holds left out ("": none).
 	// The commits are the namespace's (a lasting branch holds the commits of every namespace).
 	JoinedCommits(ctx context.Context, namespace, branch, except string, after, upTo int64) ([]int64, error)
+	// TakeCommits makes a branch take, at a new order of its own, the commits of the namespace another branch (from)
+	// holds from the order after up to upTo (a rebase, ADR 0177): JoinedCommits, NextCommit and JoinCommits in one write,
+	// nothing read back.
+	TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error
 
 	// DeleteChange removes a change that committed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when

@@ -1304,3 +1304,7 @@ func (t *sqliteTx) LastCommit(ctx context.Context, branch string) (int64, error)
 	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&seq)
 	return seq, err
 }
+
+func (t *sqliteTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
+	return takeCommitsOf(ctx, t, branch, change, logSeq, namespace, from, after, upTo)
+}

@@ -90,7 +90,7 @@ func (im *Importer) prepare(ctx context.Context, c Commit) (*prepared, error) {
 	p := &prepared{c: c, files: map[string]*fileInfo{}}
 	var jobs []fileJob
 	for _, e := range c.Entries {
-		if e.NewMode == modeNone || e.Status == 'D' || IsTree(e.NewMode) || e.NewMode == ModeGitlink {
+		if e.NewMode == modeNone || e.Status == 'D' || IsTree(e.NewMode) || e.NewMode == ModeGitlink || im.excluded(e.Path) {
 			continue
 		}
 		jobs = append(jobs, fileJob{path: e.Path, blob: e.NewID, mode: e.NewMode})

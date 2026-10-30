@@ -111,6 +111,44 @@ func (h *Handler) CancelJob(ctx context.Context, r *connect.Request[jobsv1.Cance
 	return connect.NewResponse(&jobsv1.CancelJobResponse{Job: ToPB(j)}), nil
 }
 
+// AnswerJob implements the protocol.
+func (h *Handler) AnswerJob(ctx context.Context, r *connect.Request[jobsv1.AnswerJobRequest]) (*connect.Response[jobsv1.AnswerJobResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	j, err := h.Service.Answer(ctx, r.Msg.Id, r.Msg.RequestId, pbconv.Map(r.Msg.Values))
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&jobsv1.AnswerJobResponse{Job: ToPB(j)}), nil
+}
+
+// AskJob implements the protocol.
+func (h *Handler) AskJob(ctx context.Context, r *connect.Request[jobsv1.AskJobRequest]) (*connect.Response[jobsv1.AskJobResponse], error) {
+	if err := h.service(r.Header()); err != nil {
+		return nil, err
+	}
+	req := jobkit.RequestFromPB(r.Msg.Request)
+	if req == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a request is required"))
+	}
+	if err := h.Service.Ask(ctx, r.Msg.Id, r.Msg.Worker, *req); err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&jobsv1.AskJobResponse{}), nil
+}
+
+// AwaitJobAnswer implements the protocol.
+func (h *Handler) AwaitJobAnswer(ctx context.Context, r *connect.Request[jobsv1.AwaitJobAnswerRequest]) (*connect.Response[jobsv1.AwaitJobAnswerResponse], error) {
+	if err := h.service(r.Header()); err != nil {
+		return nil, err
+	}
+	m := r.Msg
+	values, ok, err := h.Service.Await(ctx, m.Id, m.Worker, m.RequestId, time.Duration(m.WaitMs)*time.Millisecond)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&jobsv1.AwaitJobAnswerResponse{Answered: ok, Values: pbconv.Struct(values)}), nil
+}
+
 // CreateJob implements the protocol.
 func (h *Handler) CreateJob(ctx context.Context, r *connect.Request[jobsv1.CreateJobRequest]) (*connect.Response[jobsv1.CreateJobResponse], error) {
 	if err := h.service(r.Header()); err != nil {

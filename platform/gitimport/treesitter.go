@@ -10,10 +10,12 @@ import (
 	"sync"
 	"unsafe"
 
+	tssvelte "github.com/tree-sitter-grammars/tree-sitter-svelte/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	tsc "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	tscpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	tsgo "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tshtml "github.com/tree-sitter/tree-sitter-html/bindings/go"
 	tsjava "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	tsjs "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tspython "github.com/tree-sitter/tree-sitter-python/bindings/go"
@@ -166,6 +168,8 @@ var queries = map[string]string{
 `,
 	"typescript": tsQuery,
 	"tsx":        tsQuery,
+	"vue":        hostQuery,
+	"svelte":     hostQuery,
 	"rust": `
 (function_item name: (identifier) @name) @definition.function
 (function_signature_item name: (identifier) @name) @definition.prototype
@@ -220,6 +224,14 @@ const tsQuery = `
 (member_expression object: (identifier) @qual property: (property_identifier) @ref.name)
 `
 
+// hostQuery finds the script blocks of a component file (Vue, Svelte): its declarations are those of its scripts,
+// parsed with the grammar of their language (scriptOf) by language injection.
+const hostQuery = `(script_element (raw_text) @script) @block`
+
+// hosts are the languages of component files, each read with the grammar of its markup (Vue's single-file components
+// are HTML at their top level), its scripts with the JavaScript or TypeScript grammar.
+var hosts = map[string]bool{"vue": true, "svelte": true}
+
 func grammar(lang string) unsafe.Pointer {
 	switch lang {
 	case "c":
@@ -240,6 +252,10 @@ func grammar(lang string) unsafe.Pointer {
 		return tsts.LanguageTSX()
 	case "rust":
 		return tsrust.Language()
+	case "vue":
+		return tshtml.Language()
+	case "svelte":
+		return tssvelte.Language()
 	}
 	return nil
 }
@@ -346,13 +362,104 @@ func local(kind string) bool { return kind == "function" || kind == "method" }
 // maxRefs bounds the names kept for one declaration.
 const maxRefs = 500
 
-// Parse parses a source and returns its package clause, its imports and its declarations in the order of the file.
+// Parse parses a source and returns its package clause, its imports and its declarations in the order of the file. A
+// component file (Vue, Svelte) gives the declarations of its script blocks, parsed as one program over their ranges
+// of the file (the offsets stay those of the file), and names their language (Source.Language).
 func (t *TreeSitter) Parse(lang string, src []byte) (Source, error) {
 	ps := t.take()
 	defer t.give(ps)
+	if !hosts[lang] {
+		return ps.parse(lang, src, nil)
+	}
+	script, ranges, err := ps.scripts(lang, src)
+	if err != nil || len(ranges) == 0 {
+		return Source{Language: script}, err
+	}
+	out, err := ps.parse(script, src, ranges)
+	out.Language = script
+	return out, err
+}
+
+// scripts finds the script blocks of a component file: their ranges in the file, in order, and their language
+// (typescript when one says lang="ts", tsx for lang="tsx", else javascript).
+func (ps parsers) scripts(lang string, src []byte) (string, []sitter.Range, error) {
+	p, err := ps.parser(lang)
+	if err != nil {
+		return "", nil, err
+	}
+	tree := p.p.Parse(src, nil)
+	if tree == nil {
+		return "", nil, fmt.Errorf("tree-sitter: %s: no tree", lang)
+	}
+	defer tree.Close()
+	qc := sitter.NewQueryCursor()
+	defer qc.Close()
+	script := "javascript"
+	var ranges []sitter.Range
+	matches := qc.Matches(p.q, tree.RootNode(), src)
+	for m := matches.Next(); m != nil; m = matches.Next() {
+		for _, c := range m.Captures {
+			switch p.captures[c.Index] {
+			case "script":
+				if c.Node.EndByte() > c.Node.StartByte() {
+					ranges = append(ranges, c.Node.Range())
+				}
+			case "block":
+				switch scriptLang(&c.Node, src) {
+				case "ts", "typescript":
+					if script != "tsx" {
+						script = "typescript"
+					}
+				case "tsx":
+					script = "tsx"
+				}
+			}
+		}
+	}
+	slices.SortFunc(ranges, func(a, b sitter.Range) int { return int(a.StartByte) - int(b.StartByte) })
+	return script, ranges, nil
+}
+
+// scriptLang is the lang attribute of a script element, "" when it has none.
+func scriptLang(block *sitter.Node, src []byte) string {
+	for i := uint(0); i < block.NamedChildCount(); i++ {
+		tag := block.NamedChild(i)
+		if tag.Kind() != "start_tag" {
+			continue
+		}
+		for j := uint(0); j < tag.NamedChildCount(); j++ {
+			a := tag.NamedChild(j)
+			if a.Kind() != "attribute" {
+				continue
+			}
+			var name, value string
+			for k := uint(0); k < a.NamedChildCount(); k++ {
+				switch c := a.NamedChild(k); c.Kind() {
+				case "attribute_name":
+					name = c.Utf8Text(src)
+				case "attribute_value", "quoted_attribute_value":
+					value = cleanName(c.Utf8Text(src))
+				}
+			}
+			if strings.EqualFold(name, "lang") {
+				return strings.ToLower(value)
+			}
+		}
+	}
+	return ""
+}
+
+// parse reads the declarations of a source in a language, over the ranges of src given (all of it when none).
+func (ps parsers) parse(lang string, src []byte, ranges []sitter.Range) (Source, error) {
 	p, err := ps.parser(lang)
 	if err != nil {
 		return Source{}, err
+	}
+	if len(ranges) > 0 {
+		if err := p.p.SetIncludedRanges(ranges); err != nil {
+			return Source{}, fmt.Errorf("tree-sitter: %s: %w", lang, err)
+		}
+		defer p.p.SetIncludedRanges(nil) //nolint:errcheck // no range: the whole source
 	}
 	tree := p.p.Parse(src, nil)
 	if tree == nil {

@@ -127,14 +127,38 @@ func baseVersions(ctx context.Context, tx Tx, b domain.Branch, ids []domain.Node
 }
 
 // referenceVersions reads some nodes in the reference commit of a change: what its branch stands on (its fork and the
-// commits it took of its target, baseVersions, ADR 0177), else its fork.
+// commits it took of its target, baseVersions, ADR 0177), else its fork. A commit the branch shares with its target is
+// one it holds: the nodes it holds no version of are read at the fork alone, from the latest versions on the branch the
+// checkout reads anyway (kept by the transaction).
 func referenceVersions(ctx context.Context, tx Tx, c domain.Change, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	own, ok, err := ownBranch(ctx, tx, c)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if !ok || len(ids) == 0 {
 		return versionsAt(ctx, tx, c.ForkCommit, ids)
+	}
+	var on map[domain.NodeID]domain.Version
+	if gt, ok := unwrapGuard(tx); ok {
+		refs, err := gt.prefetchLatestOn(ctx, ids, own.Name)
+		if err != nil {
+			return nil, err
+		}
+		on = make(map[domain.NodeID]domain.Version, len(refs))
+		for _, r := range refs {
+			on[r.ID] = r.Version
+		}
+	} else if on, err = tx.LatestVersionsOn(ctx, ids, own.Name); err != nil {
+		return nil, err
+	}
+	var held []domain.NodeID
+	for _, id := range ids {
+		if on[id] > 0 {
+			held = append(held, id)
+		}
+	}
+	if len(held) == 0 {
+		return versionsAt(ctx, tx, own.ForkCommit, ids)
 	}
 	return baseVersions(ctx, tx, own, ids)
 }
@@ -301,10 +325,6 @@ func (g *Graph) takeTarget(ctx context.Context, tx Tx, c domain.Change, own *dom
 			}
 		}
 	}
-	seqs, err := tx.JoinedCommits(ctx, own.Namespace, to.parent.Name, "", to.pos, to.last)
-	if err != nil {
-		return err
-	}
 	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
 		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderRebasedOnto: {To: string(to.head)}}})
 	if err != nil {
@@ -314,7 +334,7 @@ func (g *Graph) takeTarget(ctx context.Context, tx Tx, c domain.Change, own *dom
 	if err != nil {
 		return err
 	}
-	if err := takeRows(ctx, tx, own.Name, c.ID, e.Seq, seqs); err != nil {
+	if err := tx.TakeCommits(ctx, own.Name, c.ID, e.Seq, own.Namespace, to.parent.Name, to.pos, to.last); err != nil {
 		return err
 	}
 	to.pos = to.last

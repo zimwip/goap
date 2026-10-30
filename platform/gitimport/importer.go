@@ -138,6 +138,12 @@ type Importer struct {
 	// OnPart, when set, is called before each sub-change of a commit written by sub-changes: its number, how many, what
 	// it writes.
 	OnPart func(i, n int, name string)
+	// Exclude are paths left out of every commit (see Excluded), recorded on the repository node with what the runs
+	// before decided.
+	Exclude []string
+	// Decide, when set, is asked at the start of a run which build artifacts the tree of Rev holds to import anyway
+	// (their ids), among those no run decided on yet (Detect); the others are left out. Nil: nothing is looked for.
+	Decide func(ctx context.Context, found []Artifact) (include []string, err error)
 
 	ix      index
 	head    domain.CommitID
@@ -148,6 +154,8 @@ type Importer struct {
 	readers *readers          // read the files of the commits, one per worker
 	stats   Stats
 	start   time.Time
+	// decision is what the run leaves out, and what it imports anyway, recorded on the repository node.
+	decision Decision
 }
 
 // Stats is what a run did.
@@ -243,6 +251,9 @@ func (im *Importer) run(ctx context.Context) (Stats, error) {
 	}
 	if im.Max > 0 {
 		im.stats.Total = min(im.stats.Total, im.Max)
+	}
+	if err := im.decideArtifacts(ctx, rev, im.stats.Total > 0); err != nil {
+		return im.stats, err
 	}
 	if err := im.main(ctx, from, rev); err != nil {
 		im.report(true)
@@ -375,6 +386,8 @@ type index struct {
 	byKey  map[string]*entry
 	keyOf  map[domain.NodeID]string
 	commit string // the last commit imported (the repository node's)
+	// artifacts is what the runs before decided on the build artifacts (the repository node's)
+	artifacts Decision
 	// into are the links entering a node: target → link → source.
 	into map[domain.NodeID]map[domain.LinkID]domain.NodeID
 	// fileSyms are the symbols of each file (by key), gomods the go.mod files by directory (their blob).
@@ -479,7 +492,7 @@ func (ix *index) apply(repo string, nodes []domain.Node, links []domain.Link, de
 		str := func(k string) string { s, _ := n.Properties[k].(string); return s }
 		switch {
 		case n.Key == repo:
-			ix.commit, e.sum = str("commit"), entrySum(n.Type, n.Properties)
+			ix.commit, e.sum, ix.artifacts = str("commit"), entrySum(n.Type, n.Properties), decisionOf(n.Properties["artifacts"])
 		case n.Type == TypeDirectory:
 			e.sum = entrySum(n.Type, n.Properties)
 		case isSymbolType(n.Type):
@@ -838,9 +851,21 @@ func (im *Importer) plan(ctx context.Context, p *prepared) ([]*op, error) {
 	}
 	root := get("", true)
 	root.props = map[string]any{"name": im.Name, "path": "", "tree": c.Tree, "commit": c.Hash, "url": im.Source, "ref": im.Rev}
+	if !im.decision.empty() {
+		root.props["artifacts"] = im.decision.value()
+	}
 	for _, e := range c.Entries {
 		oldDir, newDir := IsTree(e.OldMode), IsTree(e.NewMode)
 		had, has := e.OldMode != modeNone && e.Status != 'A', e.NewMode != modeNone && e.Status != 'D'
+		if im.excluded(e.Path) {
+			// left out: what the graph holds of it goes, nothing new comes
+			if o := get(e.Path, oldDir || newDir); o.cur != nil && !o.cur.removed {
+				o.remove = true
+			} else if o.props == nil {
+				delete(ops, o.key)
+			}
+			continue
+		}
 		if had && (!has || oldDir != newDir) {
 			if o := get(e.Path, oldDir); o.cur != nil && !o.cur.removed {
 				o.remove = true
