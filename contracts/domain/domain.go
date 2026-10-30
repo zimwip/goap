@@ -74,8 +74,8 @@ const MainBranch = "main"
 // Version reasons.
 const (
 	ReasonCreate = "create" // first version of a node
-	ReasonRevise = "revise" // successor on the same branch
-	ReasonDerive = "derive" // first version on a parallel branch
+	ReasonRevise = "revise" // successor of a version the branch holds (its own, or one it took, ADR 0177)
+	ReasonDerive = "derive" // first version on a parallel branch, from a version it reads at its fork
 	ReasonMerge  = "merge"  // merge of versions of two branches, written on the branch merged into
 	// ReasonRebase: a merge seen from the other side (ADR 0133): the version a rebase writes on the branch of a change,
 	// merging into it the version of the branch it was forked from (its parent branch). Parents: the version the

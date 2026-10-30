@@ -61,7 +61,7 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 		held[nodeOf(cn)] = true
 	}
 	// only a node the branch holds a version of can differ from the fork (ADR 0137)
-	changed, err := tx.BranchNodeIDs(ctx, own.Name)
+	changed, err := tx.BranchNodeIDs(ctx, own.Name, own.Parent)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -74,7 +74,7 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 	if len(ids) == 0 {
 		return nil, nil, nil
 	}
-	fork, err := forkVersions(ctx, tx, own, ids)
+	fork, err := baseVersions(ctx, tx, own, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,7 +429,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	}
 	// the nodes read are the ones the branch holds a version of (only those can differ from the fork) and the ones the
 	// impacts start from, never the whole states (ADR 0137)
-	ids, err := tx.BranchNodeIDs(ctx, own.Name)
+	ids, err := tx.BranchNodeIDs(ctx, own.Name, own.Parent)
 	if err != nil {
 		return res, err
 	}
@@ -440,7 +440,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	}
 	slices.Sort(ids)
 	ids = slices.Compact(ids)
-	forkNodes, err := forkVersions(ctx, tx, forked, ids)
+	forkNodes, err := baseVersions(ctx, tx, forked, ids)
 	if err != nil {
 		return res, err
 	}
@@ -558,7 +558,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	}
 	// the rebase is one entry naming what the branch is brought onto, then the nodes it changes, then the review of the
 	// merge, then its commit (ADR 0144)
-	if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
+	if err := g.takeOnto(ctx, tx, c.ID, &own, &to); err != nil {
 		return res, err
 	}
 	rebased := map[string]any{"branch": target, "commit": string(to.head)}
@@ -580,33 +580,14 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	return res, nil
 }
 
-// moveFork moves the fork of the branch of a change onto what it is forked from now, with the change's reference
-// commit: a change.updated entry records the move (HeaderForkCommit, ADR 0101).
-func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *domain.Branch, to onto) error {
+// takeOnto brings the branch of a change up to what it is forked from (ADR 0177): the branch takes the commits it does
+// not hold yet (takeTarget), its fork never moves. own and to follow.
+func (g *Graph) takeOnto(ctx context.Context, tx Tx, id domain.ChangeID, own *domain.Branch, to *onto) error {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return err
 	}
-	from := own.ForkCommit
-	if err := to.forkOn(ctx, tx, own); err != nil {
-		return err
-	}
-	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderForkCommit: {From: string(c.ForkCommit), To: string(own.ForkCommit)}}})
-	if err != nil {
-		return err
-	}
-	if _, err := tx.AppendLog(ctx, e); err != nil {
-		return err
-	}
-	if err := g.forkMoved(ctx, tx, c, own, from); err != nil {
-		return err
-	}
-	if c, err = tx.Change(ctx, id); err != nil {
-		return err
-	}
-	c.ForkCommit = own.ForkCommit
-	return tx.PutChange(ctx, c)
+	return g.takeTarget(ctx, tx, c, own, to)
 }
 
 // committedBehind fills the rebase state of a change that committed on its branch: what it is forked from when that
@@ -624,7 +605,7 @@ func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own
 	for _, cn := range mainImpactsOf(c).All() {
 		ids = append(ids, nodeOf(cn))
 	}
-	forkNodes, err := forkVersions(ctx, tx, own, ids)
+	forkNodes, err := baseVersions(ctx, tx, own, ids)
 	if err != nil {
 		return err
 	}
@@ -756,7 +737,7 @@ func (g *Graph) unmerged(ctx context.Context, tx Tx, c domain.Change) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	ids, err := tx.BranchNodeIDs(ctx, own.Name)
+	ids, err := tx.BranchNodeIDs(ctx, own.Name, own.Parent)
 	if err != nil {
 		return 0, err
 	}

@@ -142,6 +142,9 @@ type guardTx struct {
 	// latestOn are the latest versions on a branch it read in a batch, by branch then node (0: none there), dropped for
 	// a node it writes or joins a version of (versioncache.go)
 	latestOn map[string]map[domain.NodeID]domain.Version
+	// positions are the positions of branches on their targets it read (Position, ADR 0177), dropped whenever a branch
+	// takes commits
+	positions map[positionKey]int64
 	// wroteLinks are the links of versions it wrote, read back in a batch (prefetch), dropped when it writes links of
 	// the version again
 	wroteLinks map[domain.NodeRef][]domain.Link
@@ -766,6 +769,48 @@ func (t *guardTx) JoinCommits(ctx context.Context, branch string, change domain.
 	if err != nil {
 		return err
 	}
+	t.positions = nil
+	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
+}
+
+// positionKey names a position read: the branch, its target and the order of its fork.
+type positionKey struct {
+	branch, target string
+	fork           int64
+}
+
+// Position keeps what it read until a branch takes commits: a merge reads it several times (ADR 0177).
+func (t *guardTx) Position(ctx context.Context, branch, target string, forkSeq int64) (int64, error) {
+	k := positionKey{domain.BranchOf(branch), domain.BranchOf(target), forkSeq}
+	if p, ok := t.positions[k]; ok {
+		return p, nil
+	}
+	p, err := t.Tx.Position(ctx, branch, target, forkSeq)
+	if err != nil {
+		return 0, err
+	}
+	if t.positions == nil {
+		t.positions = map[positionKey]int64{}
+	}
+	t.positions[k] = p
+	return p, nil
+}
+
+// takeRows is takeRows of a rebase (ADR 0177): the rows at an order of their own, no commit of the branch marked; what
+// was read of the latest versions on the branch is dropped.
+func (t *guardTx) takeRows(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, seqs []int64) error {
+	if err := t.needChange(change, "the commits "+branch+" takes"); err != nil {
+		return err
+	}
+	if logSeq != 0 && !(t.reserved.change == change && t.reserved.seq == logSeq) && (logSeq > t.appended[change] || t.appended[change] == 0) {
+		return fmt.Errorf("the commits %s takes: log entry %d of change %s is neither reserved nor appended by the transaction: %w", branch, logSeq, change, ErrInvalid)
+	}
+	at, err := t.Tx.NextCommit(ctx)
+	if err != nil {
+		return err
+	}
+	delete(t.latestOn, domain.BranchOf(branch))
+	t.positions = nil
 	return t.Tx.JoinCommits(ctx, branch, change, at, logSeq, seqs)
 }
 
@@ -833,7 +878,7 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
-	t.purged, t.nodes, t.latestOn, t.keys, t.wroteLinks = true, nil, nil, nil, nil
+	t.purged, t.nodes, t.latestOn, t.keys, t.wroteLinks, t.positions = true, nil, nil, nil, nil, nil
 	t.g.versions.reset()
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err

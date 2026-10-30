@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -238,39 +239,59 @@ func (g *Graph) rootTarget(ctx context.Context, tx Tx, c domain.Change) (string,
 	return domain.BranchOf(own.Parent), nil
 }
 
-// reparent forks the branch of a change again from the head of the branch target, the change's header (parent,
-// chain) already set: what it committed is rebased there, conflicts refusing the move; a change that committed
-// nothing is forked from that head; one without a branch of its own gets one.
+// reparent gives a change a new branch forked from the head of the branch target, the change's header (parent, chain)
+// already set (ADR 0177 §10): the new branch takes the commits of the change's own (what its old branch holds that its
+// old parent does not), then what it committed is rebased there, conflicts refusing the move. The old branch stays as it
+// was: nothing is updated or deleted. A change without a branch of its own gets one.
 func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target string) (domain.Change, error) {
 	tb, err := branchOf(ctx, tx, c.Namespace, target)
 	if err != nil {
 		return c, err
 	}
-	own, ok, err := ownBranch(ctx, tx, c)
+	before, had, err := ownBranch(ctx, tx, c)
 	if err != nil {
 		return c, err
 	}
-	if !ok {
-		own = domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Origin: domain.ChangeBranchOrigin(c.ID),
-			Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
+	name := changeBranchName(c.ID)
+	if had {
+		name += "." + g.newID()[:8]
 	}
-	before := own // what it was forked from: the base of the rebase
-	own.Parent = target
-	if !hasCommits(c) {
-		if err := (onto{parent: tb}).forkOnHead(ctx, tx, &own); err != nil {
-			return c, err
-		}
-		c.ForkCommit = own.ForkCommit
+	own := domain.Branch{Ephemeral: true, Name: name, Namespace: c.Namespace, Parent: target, Origin: domain.ChangeBranchOrigin(c.ID),
+		Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
+	if had {
+		own.Intent = before.Intent
+	}
+	if err := (onto{parent: tb}).forkOnHead(ctx, tx, &own); err != nil {
+		return c, err
 	}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, err
 	}
-	c.Branch = own.Name
+	c.Branch, c.ForkCommit = own.Name, own.ForkCommit
 	if err := tx.PutChange(ctx, c); err != nil {
 		return c, err
 	}
-	if !hasCommits(c) {
+	if !had || !hasCommits(c) {
+		if tb.Ephemeral {
+			return c, g.catchUp(ctx, tx, c)
+		}
 		return c, nil
+	}
+	// the commits of the change's own, taken by the new branch, recorded by the entry naming the move
+	seqs, err := tx.JoinedCommits(ctx, c.Namespace, before.Name, before.Parent, 0, math.MaxInt64)
+	if err != nil {
+		return c, err
+	}
+	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{"branch": {From: before.Name, To: own.Name}}})
+	if err != nil {
+		return c, err
+	}
+	if e, err = tx.AppendLog(ctx, e); err != nil {
+		return c, err
+	}
+	if err := takeRows(ctx, tx, own.Name, c.ID, e.Seq, seqs); err != nil {
+		return c, err
 	}
 	res, err := g.rebaseOnto(ctx, tx, c, own, before, false)
 	if err != nil {

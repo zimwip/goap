@@ -262,8 +262,9 @@ func (a *applier) versionOf(cn domain.ChangeImpact, d domain.Draft) (domain.Node
 	}
 	n.Version, n.Parents, n.Reason = last+1, []domain.Version{d.Base.Version}, domain.ReasonDerive
 	// the version checked out from is the latest of the node on the branch, or the node is not on it (the latest being
-	// that version, it is on the branch)
-	if on, ok := a.latestOn[d.Node]; ok && on != d.Base.Version {
+	// that version, it is on the branch); a rebase merging the version its branch took of the target (ADR 0177) reads
+	// that one
+	if on, ok := a.latestOn[d.Node]; ok && on != d.Base.Version && (d.MergedWith == nil || on != d.MergedWith.Version) {
 		return n, fmt.Errorf("%s changed on the branch of change %s since it was checked out (v%d, checked out from v%d): %w", d.Key, a.change.ID, on, d.Base.Version, ErrConflict)
 	} else if ok {
 		n.Reason = domain.ReasonRevise

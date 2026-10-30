@@ -39,9 +39,10 @@ func testChangeStack(t *testing.T, repo Repo) {
 	head := must[domain.Commit](t)(g.apply(ctx, parent.ID, ""))
 
 	n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"))
-	// B's draft was rebased onto A's version at its commit (ADR 0165): its version derives from A's
-	if n.Reason != domain.ReasonDerive || len(n.Parents) != 1 || n.ChangeID != b.ID {
-		t.Fatalf("B's version derives from A's: %+v", n)
+	// B's draft was rebased onto A's version at its commit (ADR 0165), which its branch took (ADR 0177): its version
+	// revises A's
+	if n.Reason != domain.ReasonRevise || len(n.Parents) != 1 || n.ChangeID != b.ID {
+		t.Fatalf("B's version revises A's: %+v", n)
 	}
 	ids := func(cs []domain.StackChange) []domain.ChangeID {
 		var out []domain.ChangeID
@@ -68,7 +69,7 @@ func testChangeStack(t *testing.T, repo Repo) {
 		t.Fatalf("sub-changes name their parent: %+v", vs.Changes)
 	}
 	last := vs.Versions[len(vs.Versions)-1]
-	if last.Version != n.Version || last.Reason != domain.ReasonDerive || len(vs.Versions) != 3 || vs.Versions[0].Version != w.cmp3.Version {
+	if last.Version != n.Version || last.Reason != domain.ReasonRevise || len(vs.Versions) != 3 || vs.Versions[0].Version != w.cmp3.Version {
 		t.Fatalf("lineage: %+v", vs.Versions)
 	}
 	if !slices.ContainsFunc(last.Joined, func(j domain.VersionJoin) bool { return j.Branch == domain.MainBranch && j.Change == parent.ID }) {

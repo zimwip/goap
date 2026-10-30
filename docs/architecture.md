@@ -137,7 +137,7 @@ codes or kinds; none listed anywhere: nothing restricted), so a reviewer (`opera
 and never edits or withdraws; the graph asks `Graph.OperationAuthorizer` (`graphsvc.OperationAuthorizer`:
 `operation:perform` with the roles allowed, from `registrysvc.Service.OperationRoles`).
 
-A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `commitId` `{from, to}` field, `Branch.rebasedFrom` set once), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its fork moves onto the head (no commit: the branch of a change holds none, ADR 0140), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. Since [ADR 0165](adr/0165-a-commit-rebases-its-drafts-onto-the-head.md) the commit first rebases the drafts it writes onto the head of its target (a draft checked out again from the head's version, the difference of the three-way merge as an update, the state moved only by moves its lifecycle allows from the head's state: the moves the change recorded replayed, or one move when both sides moved it, else a `state` conflict); a conflict stops the commit and the rebase is kept, a clean one commits versions deriving from the head's, and the merge, following the lineage of each node, is a fast-forward. Since [ADR 0166](adr/0166-a-change-stays-open-until-closed.md) the merge leaves the change open: it merges what the change committed (its branch forked again from what it merged), whatever the change still works on, and `CloseChange` ends it: everything settled, the lifecycle in a final state, what is left merged, the change applied. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
+A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-commits.md), `RebaseChange` / `GetRebaseState` also serve root changes; `MergeChange` rebases it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the branch of the change takes the target's commits up to the head (one `change.updated` entry with a `rebasedOnto` `{to}` field; its fork never moves, ADR 0177), and commit is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: its branch takes the target's commits up to the head (rows, no commit header, ADR 0177), the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. Since [ADR 0165](adr/0165-a-commit-rebases-its-drafts-onto-the-head.md) the commit first rebases the drafts it writes onto the head of its target (a draft checked out again from the head's version, the difference of the three-way merge as an update, the state moved only by moves its lifecycle allows from the head's state: the moves the change recorded replayed, or one move when both sides moved it, else a `state` conflict); a conflict stops the commit and the rebase is kept, a clean one commits versions deriving from the head's, and the merge, following the lineage of each node, is a fast-forward. Since [ADR 0166](adr/0166-a-change-stays-open-until-closed.md) the merge leaves the change open: it merges what the change committed (its fork kept: its next rebase takes the target's fast-forward, ADR 0177), whatever the change still works on, and `CloseChange` ends it: everything settled, the lifecycle in a final state, what is left merged, the change applied. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start
@@ -168,7 +168,18 @@ A version is **part of several branches** when a merge commits it as is: the tar
 instead of copying it. A branch holds every commit it is part of, its own (from their order) and the ones it took
 (from the order of the merge), one row each, and is read one way: the version of a node is the greatest of the commits
 it holds; a state is the sum of the modifications applied to it. A revert is a version like any other (a copy of the version it puts back, a tombstone for a creation),
-written again over the new fork when the fork of its change moves.
+written again when its branch takes commits of its target that move the version it puts back.
+A change's branch is brought up to date by **taking the commits of its target** ([ADR 0177](adr/0177-a-rebase-takes-commits.md)):
+the target's rows past the branch's position on it (the greatest order, on the target, of the target's rows the branch
+holds, else its fork), at a new order, recorded by a `change.updated` entry `rebasedOnto` of its log (`log_seq`), no
+commit header; the fork of a branch and of a change is written once and never moves, `forkAfterMerge` and the fork
+moves are gone. A commit is written only to compensate: the three-way merge of a node both sides changed (base: the
+rows both the branch and its target hold, over the fork; versions with reason `rebase`), a revert written again. What
+the change did is what its branch holds and its target does not; the branch as it stands is its rows over its parent's
+view at its fork. Seen from the change's branch this is a `git merge` of the target with no merge commit unless a node
+overlaps, not a `git rebase`: nothing of the branch is rewritten; seen from the target, the fast-forward keeps it linear.
+A sub-change takes, at its creation, the rows its parent holds past its fork; an attach / detach opens a new branch
+(`change-<id>.<suffix>`) taking the change's own rows, the old branch left as it was.
 
 ```
 REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward of A)
@@ -194,8 +205,8 @@ REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward o
   target, nothing is copied. A change is rebased onto its target before it commits (ADR 0101), so the fast-forward is the
   normal path and the merge a race or a branch merged by hand. The commit carries its `kind` (`fast-forward`,
   `merge`, `commit`, `rebase`, `revert`, `snapshot`: every commit is a row, the ones of a change's branch included,
-  each recording the fork it stands on, [ADR 0175](adr/0175-everything-is-a-commit.md)) and, for a rebased change,
-  `rebasedFrom` (the commit it was forked from before, copied from `Branch.rebasedFrom`). The history tab (`CommitBranchGraph`, `commitHistory.ts`) shows the kind as a badge on each row,
+  each recording the fork it stands on, [ADR 0175](adr/0175-everything-is-a-commit.md)); `rebasedFrom`, from
+  `Branch.rebasedFrom`, is no longer written: a rebase takes commits and moves no fork (ADR 0177). The history tab (`CommitBranchGraph`, `commitHistory.ts`) shows the kind as a badge on each row,
   a "rebased" badge ("rebased onto T1, was B") with a dashed "rebased from" edge next to the solid fork edge, edges labelled
   fork / rebase / merge / fast-forward, and on a merge the change and the branch merged. Every open branch forked from the
   branch shown has a lane (ADR 0102): its commits, or, while it committed nothing, its open head drawn as a transparent dot.
@@ -834,7 +845,7 @@ its open sub-changes and to the open changes depending on it ([ADR 0108](adr/010
 `change.merged`, `change.attached` and `change.detached` for that coupling. A commit, a rebase and a merge each name the
 branch and the node versions they left there ([ADR 0159](adr/0159-requests-three-levels-of-change.md): `branch`,
 `nodes` of `domain.ChangeEvent`, `domain.EventNode`): `change.committed` the versions a commit wrote on the change's
-branch, `change.rebased` the versions the commit of a rebase's merges wrote (none when only the fork moved),
+branch, `change.rebased` the versions the commit of a rebase's merges wrote (none when the branch only took commits, ADR 0177),
 `change.merged` (every merge: a sub-change into its parent's branch, a root change into a lasting one, before
 `change.applied`) the versions it wrote or joined on the target.
 **Reactive activities** ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md)): any activity of a
@@ -1246,12 +1257,12 @@ root change and its sub-changes) are serialized by `Tx.LockChange` (a transactio
 PostgreSQL; SQLite and the memory store run one transaction at a time), taken before an operation reads what it checks
 (`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
 `Tx.LockBranch` and only from the parent of the new commit (`advanceBranch`). A merge reads what it writes before it
-locks its target: the rebase onto the head it read and the fork moved there (the change's branch, under the lock of
-its tree), then the versions of the fast-forward and the nodes as the target will hold them; what decides is read
-again while the head moves before the lock, writing nothing (`checkFastForward`), and the fork is moved once, onto the
-head that stood (`finishFastForward`); under the lock it reads the head again and, unchanged, only writes
-(`applyFastForward`); moved, it reads its plan again, and rebases under the lock only when the target moved on a node
-it changed. Reads take no lock.
+locks its target: the rebase onto the head it read, the branch taking the target's commits up to it (the change's
+branch, under the lock of its tree, ADR 0177), then the versions of the fast-forward and the nodes as the target will
+hold them; what decides is read again while the head moves before the lock, writing nothing (`checkFastForward`), and
+the branch takes the commits once, up to the head that stood (`finishFastForward`); under the lock it reads the head
+again and, unchanged, only writes (`applyFastForward`); moved on none of its nodes, the branch takes what came since and
+the plan stands (`reforkFastForward`); moved on a node it changed, it rebases under the lock. Reads take no lock.
 
 Every `change_id` above is `NOT NULL`, with no foreign key: the schema declares none (no trigger runs on an insert),
 the guard checks every reference at the end of the transaction; `owner`, `project`,

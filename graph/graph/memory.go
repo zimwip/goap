@@ -763,8 +763,11 @@ func (t *memTx) NodeIDsOfType(_ context.Context, namespace, typ string, after do
 	return out[:min(len(out), limit)], nil
 }
 
-func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID, error) {
+func (t *memTx) BranchNodeIDs(_ context.Context, branch, except string) ([]domain.NodeID, error) {
 	branch = domain.BranchOf(branch)
+	if except != "" {
+		except = domain.BranchOf(except)
+	}
 	seen := map[domain.NodeID]bool{}
 	var out []domain.NodeID
 	add := func(id domain.NodeID) {
@@ -776,8 +779,10 @@ func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID
 	for id, vs := range t.st.versions {
 		for _, v := range vs {
 			if _, ok := t.holds(v, branch); ok {
-				add(id)
-				break
+				if _, out := t.holds(v, except); except == "" || !out {
+					add(id)
+					break
+				}
 			}
 		}
 	}
@@ -942,10 +947,13 @@ func (t *memTx) JoinCommits(_ context.Context, branch string, change domain.Chan
 	return nil
 }
 
-func (t *memTx) JoinedCommits(_ context.Context, branch string, after, upTo int64) ([]int64, error) {
+func (t *memTx) JoinedCommits(_ context.Context, _, branch, except string, after, upTo int64) ([]int64, error) {
 	branch = domain.BranchOf(branch)
 	var out []int64
 	for k, j := range t.st.joins {
+		if _, out := t.st.joins[joinKey{domain.BranchOf(except), k.seq}]; except != "" && out {
+			continue
+		}
 		if k.branch == branch && j.at > after && j.at <= upTo {
 			out = append(out, k.seq)
 		}
@@ -1297,6 +1305,50 @@ func (t *memTx) StoreCounts(_ context.Context, namespace string) (map[string]map
 		}
 	}
 	return out, nil
+}
+
+func (t *memTx) SharedCommits(_ context.Context, namespace, branch, other string, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	namespace, branch, other = domain.NamespaceOf(namespace), domain.BranchOf(branch), domain.BranchOf(other)
+	var want map[domain.NodeID]bool
+	if ids != nil {
+		want = make(map[domain.NodeID]bool, len(ids))
+		for _, id := range ids {
+			want[id] = true
+		}
+	}
+	out := map[domain.NodeID]CommittedVersion{}
+	for id, vs := range t.st.versions {
+		if want != nil && !want[id] || len(vs) == 0 || domain.NamespaceOf(vs[0].Namespace) != namespace {
+			continue
+		}
+		for i := len(vs) - 1; i >= 0; i-- {
+			v := vs[i]
+			_, a := t.holds(v, branch)
+			_, b := t.holds(v, other)
+			if a && b {
+				out[id] = CommittedVersion{Version: v.Version, Deleted: v.Deleted}
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) Position(_ context.Context, branch, target string, forkSeq int64) (int64, error) {
+	branch, target = domain.BranchOf(branch), domain.BranchOf(target)
+	var at int64
+	if j, ok := t.st.joins[joinKey{target, forkSeq}]; ok && forkSeq > 0 {
+		at = j.at
+	}
+	for k := range t.st.joins {
+		if k.branch != branch {
+			continue
+		}
+		if j, ok := t.st.joins[joinKey{target, k.seq}]; ok {
+			at = max(at, j.at)
+		}
+	}
+	return at, nil
 }
 
 func (t *memTx) LastCommit(_ context.Context, branch string) (int64, error) {

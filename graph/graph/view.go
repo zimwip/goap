@@ -924,7 +924,7 @@ func (w *world) nodes(ctx context.Context, tx Tx, q NodeQuery) (NodePage, error)
 	// the nodes of the world the change wrote: their versions in it
 	var mine []domain.NodeID
 	if w.own {
-		ids, err := tx.BranchNodeIDs(ctx, w.branch.Name)
+		ids, err := tx.BranchNodeIDs(ctx, w.branch.Name, "")
 		if err != nil {
 			return NodePage{}, err
 		}

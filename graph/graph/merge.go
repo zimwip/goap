@@ -295,7 +295,7 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Comm
 // branch of a change, its fork with what committed on it as it stands in the transaction (ADR 0175).
 func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[domain.NodeID]domain.Version, err error) {
 	if b.Ephemeral {
-		if fork, err = forkVersions(ctx, tx, b, nil); err != nil {
+		if fork, err = baseVersions(ctx, tx, b, nil); err != nil {
 			return nil, nil, err
 		}
 		head, err = branchVersions(ctx, tx, b, nil)

@@ -193,6 +193,25 @@ func checkStates(t *testing.T, repo Repo) {
 					continue
 				}
 				want := maps.Clone(p.Nodes)
+				if br, err := tx.Branch(ctx, b.Namespace, b.Branch); err == nil && br.Ephemeral && b.Kind != domain.CommitKindFastForward {
+					// a change's branch takes the commits of its target by a rebase (ADR 0177): the rows it took
+					// between its parent and this commit are part of the state the commit stands on
+					after := int64(0)
+					if p.Branch == b.Branch {
+						after = p.Seq
+					}
+					taken, err := tx.CommittedVersions(ctx, b.Namespace, b.Branch, after, b.Seq-1, nil)
+					if err != nil {
+						return err
+					}
+					for id, v := range taken {
+						if v == 0 {
+							delete(want, id)
+						} else {
+							want[id] = v
+						}
+					}
+				}
 				refs := committed[b.ID]
 				if b.Kind == domain.CommitKindFastForward {
 					// a fast-forward commits what its change joined to the branch, the last version of each node

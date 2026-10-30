@@ -41,7 +41,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 			pres = append(pres, cn.Pre.ID)
 		}
 	}
-	base, err := versionsAt(ctx, tx, c.ForkCommit, pres)
+	base, err := referenceVersions(ctx, tx, c, pres)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,9 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		if err := cn.Validate(); err != nil {
 			add(id, "", "structure", err.Error())
 		}
-		if cn.Pre != nil && base[cn.Pre.ID] != cn.Pre.Version && !cn.Recheck {
+		// an impact committed already names the version it was checked out from: history, the reference of the change
+		// moving past it as the change takes commits and merges (ADR 0177)
+		if cn.Pre != nil && cn.Committed == nil && base[cn.Pre.ID] != cn.Pre.Version && !cn.Recheck {
 			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference commit", cn.Pre))
 		}
 		outdated := cn.Recheck

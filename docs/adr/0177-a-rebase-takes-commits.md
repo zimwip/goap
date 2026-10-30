@@ -1,6 +1,6 @@
 # ADR 0177 — A rebase takes commits
 
-**Status**: proposed · **Date**: 2026-10 · **Builds on**: ADR 0101 (rebase), ADR 0103 (sub-changes on their own
+**Status**: accepted · **Date**: 2026-10 · **Builds on**: ADR 0101 (rebase), ADR 0103 (sub-changes on their own
 branch), ADR 0140 (a fork move commits nothing it need not), ADR 0165 (drafts rebased at commit), ADR 0166 (a change
 merged stays open), ADR 0175 (everything is a commit), ADR 0176 (a branch reads commits) · **Supersedes**: the fork
 moves of ADR 0101 / 0175 (`moveFork`, the `rebase` commit, `refreshReverts`, `RebasedFrom`)
@@ -41,9 +41,9 @@ is taking them, as a merge takes the commits of its source.
 2. **A conflict is one more commit.** A node the change changed (point 4) that the commits taken changed too is merged
    three ways: base the node at the branch's position on the target before the rebase, ours the branch's version,
    theirs the target's head. The merged nodes become drafts (`Draft.MergedWith`), and a rebase with no conflict left
-   commits them in one commit of the branch (kind `merge`, versions with reason `rebase`, written after the rows taken,
+   commits them in one commit of the branch (kind `rebase`, its `MergedFrom` the head taken, versions with reason `rebase`, written after the rows taken,
    so the greatest version is the merge's); a conflict stops it, as today, until it is resolved. A revert of the change
-   is such a node: its value is the base's, the target's wins, written by the merge commit. No overlap: rows only.
+   whose base the rows taken moved is written again over the new base, in a `rebase` commit of its own. No overlap: rows only.
 3. **The branch's position on its target** is read, never stored: the greatest order, on the target, of the target's
    rows the branch holds, else the order of the fork on the target. *Up to date* is a probe by key: the branch holds
    the head of the target (`branch_commit_pkey`). The target's own commits (its fast-forwards, its merges, its own
@@ -76,7 +76,7 @@ is taking them, as a merge takes the commits of its source.
    past that head's order (what the parent took by a rebase since its last commit): its fork is a commit, its state the
    parent's branch as it stands. A parent's later rebase is the parent's: the sub-change's branch is not touched, it is
    rebased onto its parent at its merge, like any change.
-10. **An attach / detach** (ADR 0106) opens a new branch of the change (`<change>/<n>`, `Change.Branch` names it) forked
+10. **An attach / detach** (ADR 0106) opens a new branch of the change (`change-<id>.<suffix>`, `Change.Branch` names it) forked
     from the head of the new parent, which takes the change's own commits (point 4 of the old branch), then the
     rebase of point 2 settles the nodes the new parent changed. The old branch stays as it was: nothing is deleted,
     `branch.parent` is no longer updated.
@@ -85,6 +85,16 @@ is taking them, as a merge takes the commits of its source.
     history show the rows a branch took (`VersionJoins`), so a rebase reads as the commits it took.
 
 ## Consequences
+
+- Seen from the change's branch a rebase is a `git merge` of the target, not a `git rebase`: the commits of the branch
+  are never rewritten (no update), and a merge commit is written only where a node overlaps. Seen from the target, the
+  fast-forward keeps its history linear. The traceability is the log entry `rebasedOnto` each taking records, named by
+  the rows it inserted (`log_seq`).
+- The reference commit of a change (the version an impact is checked out from, `referenceVersions`) is what its branch
+  stands on: its fork and the rows it took. A change with no branch yet is given one when its drafts are rebased onto a
+  moved head, rather than having its fork moved. An impact already committed is not checked against it any more.
+- Version reasons: a version revising one its branch took from its target is a `revise`, a `derive` only reads its
+  fork.
 
 - No update and no delete on the rebase path: `branch.fork_commit`, `branch.rebased_from`, `change.fork_commit` and
   `branch.parent` are written once. A rebase with no conflict is one insert of rows and one log entry.

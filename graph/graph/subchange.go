@@ -354,6 +354,9 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := tx.PutChange(ctx, sub); err != nil {
 				return err
 			}
+			if err := g.catchUp(ctx, tx, sub); err != nil {
+				return err
+			}
 			for _, cn := range gr.nodes {
 				// the candidate moves to the sub-change (ADR 0103): withdrawn from the parent, it comes back to it with the
 				// version the sub-change commits, when the sub-change merges

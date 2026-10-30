@@ -931,8 +931,8 @@ func (t *pgTx) NextCommit(ctx context.Context) (int64, error) {
 	return seq, err
 }
 
-func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
-	q, args := dialectPG.sqlBranchNodeIDs(branch)
+func (t *pgTx) BranchNodeIDs(ctx context.Context, branch, except string) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlBranchNodeIDs(branch, except)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1618,8 +1618,8 @@ func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.Cha
 	return mapErr(err, "branch "+branch)
 }
 
-func (t *pgTx) JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error) {
-	q, args := dialectPG.sqlJoinedCommits(branch, after, upTo)
+func (t *pgTx) JoinedCommits(ctx context.Context, namespace, branch, except string, after, upTo int64) ([]int64, error) {
+	q, args := dialectPG.sqlJoinedCommits(namespace, branch, except, after, upTo)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -1887,6 +1887,40 @@ func (t *pgTx) StoreCounts(ctx context.Context, namespace string) (map[string]ma
 		out[measure] = counts
 	}
 	return out, nil
+}
+
+func (t *pgTx) SharedCommits(ctx context.Context, namespace, branch, other string, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error) {
+	if ids != nil {
+		ids = uuidIDs(ids)
+		if len(ids) == 0 {
+			return map[domain.NodeID]CommittedVersion{}, nil
+		}
+	}
+	q, args := dialectPG.sqlSharedVersions(namespace, branch, other, ids)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[domain.NodeID]CommittedVersion{}
+	for rows.Next() {
+		var nid, reason, on string
+		var v int
+		var cv CommittedVersion
+		if err := rows.Scan(&nid, &v, &cv.Deleted, &reason, &on); err != nil {
+			return nil, err
+		}
+		cv.Version = domain.Version(v)
+		out[domain.NodeID(nid)] = cv
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) Position(ctx context.Context, branch, target string, forkSeq int64) (int64, error) {
+	q, args := dialectPG.sqlPosition(branch, target, forkSeq)
+	var at int64
+	err := t.tx.QueryRow(ctx, q, args...).Scan(&at)
+	return at, err
 }
 
 func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {

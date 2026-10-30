@@ -107,8 +107,17 @@ type Tx interface {
 	LastCommit(ctx context.Context, branch string) (int64, error)
 	// NextCommit allocates the order of a new commit (Commit.Seq): greater than every order allocated before.
 	NextCommit(ctx context.Context) (int64, error)
-	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or of a commit it took (ADR 0137, 0176).
-	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
+	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or of a commit it took (ADR 0137, 0176),
+	// the commits the branch except holds left out ("": none; ADR 0177: what a change did is what its branch holds that
+	// its target does not).
+	BranchNodeIDs(ctx context.Context, branch, except string) ([]domain.NodeID, error)
+	// SharedCommits reads the last commit of each node (nil ids: every node of the namespace) among the commits two
+	// branches both hold (ADR 0177: the base of the branch of a change, the commits of its target it took and its own
+	// its target took); Revert is never set.
+	SharedCommits(ctx context.Context, namespace, branch, other string, ids []domain.NodeID) (map[domain.NodeID]CommittedVersion, error)
+	// Position reads the position of a branch on its target (ADR 0177): the greatest order on the target of the
+	// target's commits the branch holds, or of its fork (forkSeq, 0: none); 0 when there is none.
+	Position(ctx context.Context, branch, target string, forkSeq int64) (int64, error)
 	// NamespaceNodeIDs lists the nodes of a namespace (its node rows, ADR 0143 §4): what a whole state is selected over.
 	NamespaceNodeIDs(ctx context.Context, namespace string) ([]domain.NodeID, error)
 	// NodeIDsOfType lists the nodes of a type in a namespace (its node rows, index node_type), by id, from the first one
@@ -200,8 +209,10 @@ type Tx interface {
 	// its fork); a commit the branch took already keeps the order it was taken at. A version is never rewritten when a
 	// branch takes it: the row is the record of the integration (ADR 0174 addendum).
 	JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error
-	// JoinedCommits lists the orders of the commits a branch took from the order after up to upTo.
-	JoinedCommits(ctx context.Context, branch string, after, upTo int64) ([]int64, error)
+	// JoinedCommits lists the orders of the commits a branch holds from the order after up to upTo, the ones the branch
+	// except holds left out ("": none).
+	// The commits are the namespace's (a lasting branch holds the commits of every namespace).
+	JoinedCommits(ctx context.Context, namespace, branch, except string, after, upTo int64) ([]int64, error)
 
 	// DeleteChange removes a change that committed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when

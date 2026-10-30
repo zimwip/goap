@@ -21,8 +21,8 @@ func testMergeKeepsTheChangeOpenUntilClosed(t *testing.T, repo Repo) {
 	c, id := propChange(t, g, f.base.ID, "open", f.req.Ref(), map[string]any{"a": 1})
 	must[domain.Commit](t)(g.CommitChange(ctx, c.ID, ""))
 	first := must[domain.Change](t)(g.IntegrateChange(ctx, c.ID, nil))
-	if first.Status != domain.ChangeActive || first.ForkCommit != first.LandedCommit {
-		t.Fatalf("merged and open, its branch forked from what it merged: %+v", first)
+	if first.Status != domain.ChangeActive || first.ForkCommit != c.ForkCommit || first.LandedCommit == "" {
+		t.Fatalf("merged and open, its fork kept (ADR 0177): %+v", first)
 	}
 	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); st.CanMerge || st.Unmerged != 0 || !st.CanClose {
 		t.Fatalf("nothing left to merge, the change may close: %+v", st)
