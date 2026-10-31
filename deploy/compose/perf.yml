@@ -24,7 +24,10 @@ x-telemetry: &telemetry
 services:
   postgres:
     image: pgvector/pgvector:pg17
-    command: ["postgres", "-c", "shared_buffers=${GOAP_PERF_PG_SHARED_BUFFERS:-1GB}", "-c", "max_connections=200", "-c", "track_io_timing=on"]
+    # the WAL: compressed full pages, and checkpoints spaced enough that a page written often is copied once between
+    # two (each version wrote some 28 KiB of WAL with the defaults, most of it full pages)
+    command: ["postgres", "-c", "shared_buffers=${GOAP_PERF_PG_SHARED_BUFFERS:-1GB}", "-c", "max_connections=200", "-c", "track_io_timing=on",
+      "-c", "wal_compression=lz4", "-c", "max_wal_size=${GOAP_PERF_PG_MAX_WAL:-4GB}", "-c", "checkpoint_timeout=15min"]
     environment:
       POSTGRES_USER: goap
       POSTGRES_PASSWORD: goap

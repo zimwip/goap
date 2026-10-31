@@ -143,7 +143,7 @@ func (d dialect) latestHeld(node, branch, after, upTo string) string {
 	if after == "" {
 		held = `EXISTS (SELECT 1` + probe + d.fence() + `)`
 	} else {
-		// the order the commit was taken at, read by its key from the index branch_commit_held and tested in the select
+		// the order the commit was taken at, read by its key from the index branch_commit_seq and tested in the select
 		// list, once per version: a bound on it in the probe's WHERE would let the planner walk the branch by order
 		// (branch_commit_at) for each version, and a BETWEEN over the sub-select would run it twice
 		held = `(SELECT j.at > ` + after + ` AND j.at <= ` + upTo + probe + `)`
