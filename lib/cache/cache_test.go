@@ -79,3 +79,25 @@ func TestUpdate(t *testing.T) {
 		t.Fatal("cleared cache holds entries")
 	}
 }
+
+// A named cache counts its reads and drops, and its totals leave once it is collected.
+func TestStatsAndNamed(t *testing.T) {
+	c := New(Fixed(Bounds{Bytes: 3*EntryBytes + 30, TTL: time.Hour}), func(string, int) int64 { return 10 }).Named("test-stats")
+	c.Put("a", 1)
+	c.Put("b", 2)
+	c.Put("c", 3)
+	c.Put("d", 4) // evicts a
+	if _, ok := c.Get("a"); ok {
+		t.Fatal("a kept")
+	}
+	if _, ok := c.Get("d"); !ok {
+		t.Fatal("d not kept")
+	}
+	s := c.Stats()
+	if s.Hits != 1 || s.Misses != 1 || s.Evicted != 1 || s.Entries != 3 || s.Bytes != 3*(EntryBytes+10) {
+		t.Fatalf("stats = %+v", s)
+	}
+	if got := totals()["test-stats"]; got.Hits != 1 || got.Entries != 3 {
+		t.Fatalf("totals = %+v", got)
+	}
+}

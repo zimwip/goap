@@ -32,6 +32,7 @@ type Cache[K comparable, V any] struct {
 	ll    list.List // front: the most recently read
 	m     map[K]*list.Element
 	bytes int64
+	stats Stats // the reads and the drops so far
 }
 
 type entry[K comparable, V any] struct {
@@ -66,7 +67,13 @@ func (c *Cache[K, V]) limits() Bounds {
 func (c *Cache[K, V]) Get(k K) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.get(k, c.now(), c.limits().TTL)
+	v, ok := c.get(k, c.now(), c.limits().TTL)
+	if ok {
+		c.stats.Hits++
+	} else {
+		c.stats.Misses++
+	}
+	return v, ok
 }
 
 func (c *Cache[K, V]) get(k K, now time.Time, ttl time.Duration) (V, bool) {
@@ -78,6 +85,7 @@ func (c *Cache[K, V]) get(k K, now time.Time, ttl time.Duration) (V, bool) {
 	e := el.Value.(*entry[K, V])
 	if now.Sub(e.at) >= ttl {
 		c.remove(el)
+		c.stats.Expired++
 		var zero V
 		return zero, false
 	}
@@ -107,6 +115,7 @@ func (c *Cache[K, V]) Update(k K, fn func(v V, ok bool) (V, bool)) {
 		c.remove(el)
 	}
 	if size > b.Bytes {
+		c.stats.TooLarge++
 		return
 	}
 	c.m[k] = c.ll.PushFront(&entry[K, V]{key: k, val: v, size: size, at: now})
@@ -120,6 +129,11 @@ func (c *Cache[K, V]) evict(now time.Time, b Bounds) {
 		e := el.Value.(*entry[K, V])
 		if c.bytes <= b.Bytes && now.Sub(e.at) < b.TTL {
 			return // the rest was read later
+		}
+		if c.bytes > b.Bytes {
+			c.stats.Evicted++
+		} else {
+			c.stats.Expired++
 		}
 		c.remove(el)
 	}
@@ -161,4 +175,22 @@ func (c *Cache[K, V]) Bytes() int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.bytes
+}
+
+// Stats are what a cache did and holds: Hits and Misses the reads (Get) that found a value or none, Evicted the entries
+// dropped to make room, Expired those dropped unread for the TTL, TooLarge the values larger than the whole cache, never
+// kept; Entries, Bytes and Limit what it holds now and may hold.
+type Stats struct {
+	Hits, Misses, Evicted, Expired, TooLarge int64
+	Entries                                  int
+	Bytes, Limit                             int64
+}
+
+// Stats are the counts of the cache so far and what it holds now.
+func (c *Cache[K, V]) Stats() Stats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := c.stats
+	s.Entries, s.Bytes, s.Limit = len(c.m), c.bytes, c.limits().Bytes
+	return s
 }

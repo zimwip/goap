@@ -166,7 +166,7 @@ var scriptBounds = cache.Bounds{Bytes: 32 << 20, TTL: 10 * time.Minute}
 // (an estimate).
 func (c *compiledCache[T]) get(code string, build func() (T, error)) (T, error) {
 	c.once.Do(func() {
-		c.m = cache.New(cache.Fixed(scriptBounds), func(_ [32]byte, s compiledScript[T]) int64 { return s.bytes })
+		c.m = cache.New(cache.Fixed(scriptBounds), func(_ [32]byte, s compiledScript[T]) int64 { return s.bytes }).Named("dsl.scripts")
 	})
 	key := sha256.Sum256([]byte(code))
 	if s, ok := c.m.Get(key); ok {
