@@ -645,10 +645,13 @@ so that no plan knows its length, and the plan of each run, many times its execu
 array (the links of versions, the links entering nodes) stays planned at each run. A probe reads its indexes only
 (`latestHeld`, migration 0035): the walk of a node's versions by commit order takes the number of each from
 `node_version_node_committed (node_id, committed, version)`, and the order a branch took a commit at is read from
-`branch_commit_held (branch, seq, at)` and tested in the select list of its sub-select, once per version (a bound on it
+`branch_commit_seq (seq, branch, at)` (migration 0036) and tested in the select list of its sub-select, once per version (a bound on it
 in the sub-select's WHERE lets the generic plan walk the branch by order, `branch_commit_at`, for each version). The
 bench edits nodes drawn from the whole graph, so its working set grows with it: reading no row per version walked
-halves the pages read past the cache and keeps the write rate flatter as the graph grows.
+halves the pages read past the cache and keeps the write rate flatter as the graph grows. No index is kept that no read
+uses (migration 0036: the branch of a version is never asked, a branch is read through the commits it holds; the
+indexes of shared link sets hold the versions sharing one only): each index costs a page written per version, and the
+pages a growing graph keeps hot.
 
 **Kept heads**: the graph holds in memory the head of each lasting branch its views read, the way a change view
 follows its log (`graph/graph/heads.go`, `keptBranch`). It is not read
