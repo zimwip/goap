@@ -25,6 +25,46 @@ describe("decodeLogEntry", () => {
       state: { id: "i1", key: "K" },
     });
   });
+  it("puts back what the log leaves out of an event installing a draft", () => {
+    const entry = (type: string, payload: unknown) => ({
+      id: "e1",
+      changeId: "c1",
+      type,
+      subject: "i1",
+      payload: JSON.stringify(payload),
+    });
+    expect(
+      decodeLogEntry<ImpactEvent>(
+        entry("impact.created", {
+          op: "created",
+          state: { intent: "created" },
+          draft: { node: "n1", key: "K", type: "alm@Requirement" },
+        }),
+      ),
+    ).toMatchObject({
+      post: { id: "n1", version: 0 },
+      state: { id: "i1", key: "K", type: "alm@Requirement" },
+    });
+    expect(
+      decodeLogEntry<ImpactEvent>(
+        entry("impact.checkedOut", {
+          op: "checkedOut",
+          draft: { base: { id: "n2", version: 3 } },
+          fromBase: {},
+        }),
+      ),
+    ).toMatchObject({ post: { id: "n2", version: 0 } });
+    expect(
+      decodeLogEntry<ImpactEvent>(
+        entry("impact.checkedOut", {
+          op: "checkedOut",
+          post: null,
+          draft: { base: { id: "n2", version: 3 } },
+          fromBase: {},
+        }),
+      ).post,
+    ).toBeUndefined();
+  });
   it("leaves a fact as stored", () => {
     expect(
       decodeLogEntry<{ id: string }>({

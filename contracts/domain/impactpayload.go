@@ -72,23 +72,27 @@ type absent *struct{}
 // impactPayload is an ImpactEvent as the log stores it: the envelope left to the columns.
 type impactPayload struct {
 	ImpactEvent
-	ID        absent        `json:"id,omitempty"`
-	Change    absent        `json:"changeId,omitempty"`
-	Seq       absent        `json:"seq,omitempty"`
-	Impact    absent        `json:"impactId,omitempty"`
-	Flow      absent        `json:"flow,omitempty"`
-	Execution absent        `json:"execution,omitempty"`
-	By        absent        `json:"by,omitempty"`
-	At        absent        `json:"at,omitempty"`
-	Causation absent        `json:"causation,omitempty"`
-	State     any           `json:"state,omitempty"` // *statePayload, else the change impact whole
-	Draft     *draftPayload `json:"draft,omitempty"`
+	ID        absent          `json:"id,omitempty"`
+	Change    absent          `json:"changeId,omitempty"`
+	Seq       absent          `json:"seq,omitempty"`
+	Impact    absent          `json:"impactId,omitempty"`
+	Flow      absent          `json:"flow,omitempty"`
+	Execution absent          `json:"execution,omitempty"`
+	By        absent          `json:"by,omitempty"`
+	At        absent          `json:"at,omitempty"`
+	Causation absent          `json:"causation,omitempty"`
+	State     any             `json:"state,omitempty"` // *statePayload, else the change impact whole
+	Draft     any             `json:"draft,omitempty"` // *draftPayload, *basePayload
+	PostRaw   json.RawMessage `json:"post,omitempty"`  // the post, left out where it is implied (draftNode), null for none there
 }
 
-// statePayload is the change impact a proposed or created event adds, its id being the event's impact.
+// statePayload is the change impact a proposed or created event adds, its id being the event's impact. On a created
+// event its key and type are the draft's: left out when they are (nil), written otherwise, "" included.
 type statePayload struct {
 	ChangeImpact
-	ID absent `json:"id,omitempty"`
+	ID   absent  `json:"id,omitempty"`
+	Key  *string `json:"key,omitempty"`
+	Type *string `json:"type,omitempty"`
 }
 
 // draftPayload is a draft in a payload: its change, impact and flow are the event's (applyDraft sets them).
@@ -99,11 +103,60 @@ type draftPayload struct {
 	Flow   absent `json:"flow,omitempty"`
 }
 
+// basePayload is the draft of a BaseCopy event: the version it copies says the rest (its node, key, type...).
+type basePayload struct {
+	Base       *NodeRef `json:"base,omitempty"`
+	MergedWith *NodeRef `json:"mergedWith,omitempty"`
+	Execution  string   `json:"execution,omitempty"`
+}
+
+// draftNode is the node of the draft an event installs, which its post is the draft reference of: the copied version's
+// on a BaseCopy event, else the draft's; "" when the event installs none.
+func (e ImpactEvent) draftNode() NodeID {
+	switch {
+	case e.Draft == nil || (e.Op != ImpactCreated && e.Op != ImpactCheckedOut):
+		return ""
+	case e.FromBase != nil:
+		if e.Draft.Base == nil {
+			return ""
+		}
+		return e.Draft.Base.ID
+	}
+	return e.Draft.Node
+}
+
+// nullPost is the post of an event that installs a draft and leaves the impact with no post (none today): written as
+// null, since a post left out is the draft reference of its node.
+var nullPost = json.RawMessage("null")
+
 func marshalImpact(e ImpactEvent) ([]byte, error) {
 	p := impactPayload{ImpactEvent: e}
+	// the post of an event installing a draft is the draft reference of its node: left out
+	switch n := e.draftNode(); {
+	case e.Post == nil && n != "":
+		p.PostRaw = nullPost
+	case e.Post != nil && (n == "" || *e.Post != DraftRef(n)):
+		raw, err := json.Marshal(e.Post)
+		if err != nil {
+			return nil, err
+		}
+		p.PostRaw = raw
+	}
 	if e.State != nil {
 		if e.State.ID == e.Impact {
-			p.State = &statePayload{ChangeImpact: *e.State}
+			sp := &statePayload{ChangeImpact: *e.State}
+			key, typ := e.State.Key, e.State.Type
+			sp.Key, sp.Type = &key, &typ
+			if e.Op == ImpactCreated && e.Draft != nil && e.FromBase == nil {
+				// a creation's key and type are its draft's
+				if key == e.Draft.Key {
+					sp.Key = nil
+				}
+				if typ == e.Draft.Type {
+					sp.Type = nil
+				}
+			}
+			p.State = sp
 		} else {
 			p.State = e.State // another impact's (none today): kept whole
 		}
@@ -111,12 +164,25 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 	if d := e.Draft; d != nil {
 		if e.FromBase != nil {
 			// the copy of a version: the version says the rest
-			p.Draft = &draftPayload{Draft: Draft{Base: d.Base, Execution: d.Execution, MergedWith: d.MergedWith}}
+			p.Draft = &basePayload{Base: d.Base, Execution: d.Execution, MergedWith: d.MergedWith}
 		} else {
 			p.Draft = &draftPayload{Draft: *d}
 		}
 	}
 	return json.Marshal(p)
+}
+
+// impactPayloadIn reads a payload: what marshalImpact leaves out told apart from what it writes empty.
+type impactPayloadIn struct {
+	ImpactEvent
+	State *stateIn        `json:"state"`
+	Post  json.RawMessage `json:"post"`
+}
+
+type stateIn struct {
+	ChangeImpact
+	Key  *string `json:"key"`
+	Type *string `json:"type"`
 }
 
 // One log entry may carry several events of one operation (ADR 0144): the verdicts of a review, the versions of a
@@ -297,9 +363,35 @@ func ImpactEventsOf(l LogEntry) ([]ImpactEvent, error) {
 // of a BaseCopy event holds its base only until the graph hydrates it (Hydrated). An entry carrying several events is
 // read by ImpactEventsOf.
 func ImpactEventOf(l LogEntry) (ImpactEvent, error) {
-	var e ImpactEvent
-	if err := json.Unmarshal(l.Payload, &e); err != nil {
-		return e, err
+	var in impactPayloadIn
+	if err := json.Unmarshal(l.Payload, &in); err != nil {
+		return in.ImpactEvent, err
+	}
+	e := in.ImpactEvent
+	if s := in.State; s != nil {
+		st := s.ChangeImpact
+		if s.Key != nil {
+			st.Key = *s.Key
+		} else if e.Draft != nil {
+			st.Key = e.Draft.Key
+		}
+		if s.Type != nil {
+			st.Type = *s.Type
+		} else if e.Draft != nil {
+			st.Type = e.Draft.Type
+		}
+		e.State = &st
+	}
+	switch {
+	case len(in.Post) == 0:
+		if n := e.draftNode(); n != "" {
+			ref := DraftRef(n)
+			e.Post = &ref
+		}
+	case !bytes.Equal(in.Post, nullPost):
+		if err := json.Unmarshal(in.Post, &e.Post); err != nil {
+			return e, err
+		}
 	}
 	if e.ID == "" {
 		e.ID = l.ID

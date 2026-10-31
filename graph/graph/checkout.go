@@ -858,12 +858,19 @@ func removeLinkPatch(l domain.DraftLink) map[string]any {
 	return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID)}
 }
 
-// linkPatch describes a link added to a draft, for the updated event: the audit trail reads to, the draft fold the rest.
+// linkPatch describes a link added to a draft, for the updated event, as the draft fold reads it: its target (toId and
+// toVersion, or the URL of an external one) and its properties when it has some.
 func linkPatch(l domain.DraftLink) map[string]any {
+	p := map[string]any{"id": string(l.ID), "type": l.Type}
 	if l.External() {
-		return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.Target.String(), "target": l.Target.String(), "props": l.Properties}
+		p["target"] = l.Target.String()
+	} else {
+		p["toId"], p["toVersion"] = string(l.To.ID), int(l.To.Version)
 	}
-	return map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID), "toVersion": int(l.To.Version), "props": l.Properties}
+	if len(l.Properties) > 0 {
+		p["props"] = l.Properties
+	}
+	return p
 }
 
 // ImpactLinkCreate adds an outgoing link to the draft of a change impact.

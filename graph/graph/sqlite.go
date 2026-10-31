@@ -871,11 +871,11 @@ func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.Log
 	if e.Seq != 0 {
 		// its position reserved (ReserveLogSeq)
 		_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
+			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), nullUUID(string(e.Node)))
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), string(e.Node))
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload), nullUUID(string(e.Node)))
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
@@ -987,6 +987,10 @@ func (t *sqliteTx) ReserveLogSeq(ctx context.Context, _ domain.ChangeID) (int64,
 }
 
 func (t *sqliteTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
+	eq, eargs := dialectSQLite.sqlEnsureBranchID(branch)
+	if _, err := t.tx.ExecContext(ctx, eq, eargs...); err != nil {
+		return sqliteErr(err, "branch id "+branch)
+	}
 	q, args := dialectSQLite.sqlJoinCommits(branch, change, at, logSeq, seqs)
 	_, err := t.tx.ExecContext(ctx, q, args...)
 	return sqliteErr(err, "branch "+branch)
