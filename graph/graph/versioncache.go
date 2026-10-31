@@ -43,7 +43,7 @@ func newVersionCache(bounds func() cache.Bounds) versionCache {
 			n += cache.StructBytes + int64(len(l.ID)+len(l.Type)+len(l.From.ID)+len(l.To.ID)) + cache.Of(l.Properties)
 		}
 		return n
-	})}
+	}).Named("graph.versions")}
 }
 
 func (c *versionCache) generation() uint64 {

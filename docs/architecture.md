@@ -1564,7 +1564,12 @@ What a process keeps between calls is one kind of cache ([ADR 0156](adr/0156-one
 the estimated bytes of its entries and by a TTL counted from the last read, the least recently read evicted first. The
 graph keeps its change views, version links, commit headers and impact validations in such caches
 (`Graph.Caches`); the registry and its client keep compiled methodologies there, the scripts engine its compiled
-scripts, and the gateway the state of its sessions.
+scripts, and the gateway the state of its sessions. A cache given a name (`Cache.Named`) is measured while it lives:
+`goap_cache_size_bytes` / `goap_cache_limit_bytes`, `goap_cache_entries`, `goap_cache_reads_total` (`result` hit or
+miss) and `goap_cache_drops_total` (`reason` evicted, expired, too_large), by `cache` (`graph.versions`,
+`graph.drafts`, `graph.headers`, ...), the row *Caches of the graph* of the perf dashboard; `Cache.Stats` gives the
+same counts. The version cache holds 128 MiB by default: the link sets of the nodes many changes edit (a hub holding
+hundreds of links) otherwise outgrow it, and each read of them goes back to the store.
 
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.

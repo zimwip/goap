@@ -32,7 +32,7 @@ const DefaultCacheTTL = 5 * time.Minute
 // DefaultCaches are the bounds of the caches of a graph that names none.
 var DefaultCaches = Caches{
 	Drafts:      cache.Bounds{Bytes: 64 << 20, TTL: DefaultCacheTTL},
-	Versions:    cache.Bounds{Bytes: 32 << 20, TTL: DefaultCacheTTL},
+	Versions:    cache.Bounds{Bytes: 128 << 20, TTL: DefaultCacheTTL},
 	Headers:     cache.Bounds{Bytes: 4 << 20, TTL: DefaultCacheTTL},
 	Validations: cache.Bounds{Bytes: 16 << 20, TTL: DefaultCacheTTL},
 	Structures:  cache.Bounds{Bytes: 1 << 20, TTL: DefaultCacheTTL},
@@ -56,13 +56,13 @@ func (g *Graph) boundsOf(pick func(Caches) cache.Bounds) func() cache.Bounds {
 func (g *Graph) newCaches() {
 	g.draftStates = newDraftCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Drafts }))
 	g.versions = newVersionCache(g.boundsOf(func(c Caches) cache.Bounds { return c.Versions }))
-	g.headers = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Headers }), headerSize)
-	g.selections = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Heads }), selSize)
-	g.keyIDs = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Heads }), keyIDSize)
-	g.validations = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Validations }), validationSize)
+	g.headers = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Headers }), headerSize).Named("graph.headers")
+	g.selections = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Heads }), selSize).Named("graph.selections")
+	g.keyIDs = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Heads }), keyIDSize).Named("graph.key_ids")
+	g.validations = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Validations }), validationSize).Named("graph.validations")
 	g.foundRefs = cache.New(g.boundsOf(func(c Caches) cache.Bounds { return c.Structures }), func(k string, _ bool) int64 {
 		return cache.SlotBytes + int64(len(k))
-	})
+	}).Named("graph.structures")
 }
 
 func headerSize(_ domain.CommitID, b domain.Commit) int64 {

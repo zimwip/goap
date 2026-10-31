@@ -411,7 +411,7 @@ type draftCache struct {
 }
 
 func newDraftCache(bounds func() cache.Bounds) draftCache {
-	return draftCache{views: cache.New(bounds, func(_ domain.ChangeID, s *draftState) int64 { return s.bytes })}
+	return draftCache{views: cache.New(bounds, func(_ domain.ChangeID, s *draftState) int64 { return s.bytes }).Named("graph.drafts")}
 }
 
 func (c *draftCache) get(id domain.ChangeID) *draftState {
