@@ -662,7 +662,7 @@ versions of the nodes kept with it; one told twice or older than the head held i
 own commit); one not following it leaves the head unknown, read at the next view; a transaction that moved a branch
 reads it in the transaction. A head is taken as known for `followedHeadAge` (30 s) when the events are
 followed, a lost event caught up then, else `headAge` (1 s). The version of a node at the head is kept
-by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Heads`): a selection at a commit never changes, a move with every node told carries
+by branch and node with the epoch it was known in (`Graph.selections` / `keyIDs` bounded by `Caches.Selections` / `KeyIDs`): a selection at a commit never changes, a move with every node told carries
 it to the next head, any other starts an epoch. On a branch with no fork, a node read by key in a view finds the node
 and its version there (`keptSelection`), else in one statement (`keySelector.CommittedAtKey`, `selectKey`), then kept; `GetNode` reads the latest version of main first and keeps it when the
 view selects it (`world.stored`). The access directory is apart: it follows the organisation of the platform graph,
@@ -1568,8 +1568,15 @@ scripts, and the gateway the state of its sessions. A cache given a name (`Cache
 `goap_cache_size_bytes` / `goap_cache_limit_bytes`, `goap_cache_entries`, `goap_cache_reads_total` (`result` hit or
 miss) and `goap_cache_drops_total` (`reason` evicted, expired, too_large), by `cache` (`graph.versions`,
 `graph.drafts`, `graph.headers`, ...), the row *Caches of the graph* of the perf dashboard; `Cache.Stats` gives the
-same counts. The version cache holds 128 MiB by default: the link sets of the nodes many changes edit (a hub holding
-hundreds of links) otherwise outgrow it, and each read of them goes back to the store.
+same counts. The caches whose entries are per node (`graph.versions` 128 MiB, `graph.selections` 128 MiB,
+`graph.key_ids` 64 MiB by default) hold the nodes the changes edit: once the nodes read outgrow them, each read of one
+evicted goes back to the store, a statement per key for a selection, and the rate of the writes falls as the graph
+grows. `GOAP_GRAPH_CACHES` sets their bounds (`<cache>=<MiB>,...`, the cache named as its metric without `graph.`, and
+`ttl=<duration>` for all; `graph.ParseCaches`): size them on the nodes the changes edit, the hit ratios of the dashboard
+saying when they fall short. A change editing a node reads the whole link set of the node (its
+checkout copies it into the draft): a node holding hundreds of links costs that many rows at each change, so a load
+whose hot nodes gather links (`goap-bench -hot`, `-add-links`, up to `-max-links`) slows as they grow, whatever the
+caches hold.
 
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.

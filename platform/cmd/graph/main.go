@@ -163,6 +163,10 @@ func main() {
 	srv.Readiness(events.Ready)
 
 	g := graph.New(repo)
+	// the bounds of what the graph keeps in memory between calls, "<cache>=<MiB>,...": DefaultCaches otherwise
+	if g.Caches, err = graph.ParseCaches(os.Getenv("GOAP_GRAPH_CACHES")); err != nil {
+		platform.Fatal(log, "caches", err)
+	}
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
