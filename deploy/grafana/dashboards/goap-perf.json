@@ -512,14 +512,14 @@
       }
     },
     {
-      "type": "xychart",
+      "type": "trend",
       "title": "Write rate against the versions in the graph",
       "id": 40,
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Versions and changes committed per second (slope over 2 minutes), with the versions already written on the x axis instead of time: how the write rate falls as the graph grows",
+      "description": "Versions and changes committed per second (slope over 2 minutes), with the versions already written on the x axis instead of time: how the write rate falls as the graph grows (a trend panel: its x axis is a growing numeric field)",
       "gridPos": {
         "h": 9,
         "w": 24,
@@ -595,81 +595,35 @@
               }
             ]
           }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "field": "versions in the graph"
+              }
+            ]
+          }
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "custom": {
-            "show": "points",
-            "pointSize": {
-              "fixed": 3
-            },
+            "drawStyle": "points",
+            "pointSize": 4,
             "lineWidth": 1,
-            "fillOpacity": 50,
-            "axisPlacement": "auto",
-            "axisLabel": "per second"
+            "showPoints": "always",
+            "spanNulls": true,
+            "axisLabel": "per second",
+            "axisPlacement": "auto"
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "versions in the graph"
-            },
-            "properties": [
-              {
-                "id": "custom.axisLabel",
-                "value": "versions in the graph"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "options": {
-        "mapping": "manual",
-        "series": [
-          {
-            "frame": {
-              "matcher": {
-                "id": "byIndex",
-                "options": 0
-              }
-            },
-            "x": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions in the graph"
-              }
-            },
-            "y": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions/s"
-              }
-            }
-          },
-          {
-            "frame": {
-              "matcher": {
-                "id": "byIndex",
-                "options": 0
-              }
-            },
-            "x": {
-              "matcher": {
-                "id": "byName",
-                "options": "versions in the graph"
-              }
-            },
-            "y": {
-              "matcher": {
-                "id": "byName",
-                "options": "changes/s"
-              }
-            }
-          }
-        ],
+        "xField": "versions in the graph",
         "legend": {
           "showLegend": true,
           "displayMode": "list",
@@ -677,7 +631,7 @@
           "calcs": []
         },
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       }
