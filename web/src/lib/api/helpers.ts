@@ -21,11 +21,39 @@ export function decodeLogEntry<T>(l: LogEntry): T {
     by: l.by,
     at: l.at,
   };
-  const state =
+  let state =
     payload.state && !payload.state.id
       ? { ...payload.state, id: l.subject }
       : payload.state;
-  return { ...envelope, ...payload, ...(state ? { state } : {}) } as T;
+  const draft = payload.draft as
+    | { node?: string; key?: string; type?: string; base?: { id?: string } }
+    | undefined;
+  // what the log leaves out of an event installing a draft (contracts/domain marshalImpact): its post, the draft
+  // reference of its node ("post": null when it has none), and on a creation the key and type of its draft
+  const node =
+    draft && (payload.op === "created" || payload.op === "checkedOut")
+      ? payload.fromBase
+        ? draft.base?.id
+        : draft.node
+      : undefined;
+  const post =
+    node && !("post" in payload)
+      ? { post: { id: node, version: 0 } }
+      : payload.post === null
+        ? { post: undefined }
+        : {};
+  if (state && payload.op === "created" && draft && !payload.fromBase)
+    state = {
+      ...state,
+      ...("key" in state ? {} : { key: draft.key ?? "" }),
+      ...("type" in state ? {} : { type: draft.type ?? "" }),
+    };
+  return {
+    ...envelope,
+    ...payload,
+    ...post,
+    ...(state ? { state } : {}),
+  } as T;
 }
 
 /** Puts back into a part of an entry what the parts held alike (ADR 0144: a key, or a key of an object every part held). */

@@ -135,7 +135,7 @@ type ImpactEvent struct {
 	Review *Review  `json:"review,omitempty"` // reviewed, discarded
 	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
 	// Patch is what an updated event changed on the draft: {"props": {...}, "unset": [...], "owner": unit key,
-	// "addLink": {id, type, to, toId, toVersion, props}, "updateLink": {id, props}, "removeLink": {id, type,
+	// "addLink": {id, type, toId, toVersion or target, props}, "updateLink": {id, props}, "removeLink": {id, type,
 	// to}}; a transitioned event: {"state": {"from", "to"}} and the "props" / "unset" its actions made. ApplyDraftEvent
 	// reads it.
 	Patch map[string]any `json:"patch,omitempty"`

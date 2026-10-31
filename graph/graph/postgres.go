@@ -1420,7 +1420,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		// its position is known: the insert waits for the next statement, or the commit
 		e.Seq = seq
 		insert, args := dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)}
+			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, nullUUID(string(e.Node))}
 		if t.pipe == nil {
 			_, err := q.Exec(ctx, insert, args...)
 			return e, mapErr(err, "log entry "+e.Type)
@@ -1429,7 +1429,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		return e, nil
 	}
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, string(e.Node)).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, nullUUID(string(e.Node))).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -1482,7 +1482,7 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	// the rows are inserted, and take their positions, in the order of the array
 	rows, err := q.Query(ctx, `INSERT INTO change_log (`+strings.Join(changeLogColumns, ", ")+`)
-		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb, node
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb, nullif(node, '')::uuid
 		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[], $12::text[])
 			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, node, o)
 		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads, nodes)
@@ -1614,8 +1614,21 @@ func (t *pgTx) ReserveLogSeq(ctx context.Context, id domain.ChangeID) (int64, er
 
 func (t *pgTx) JoinCommits(ctx context.Context, branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) error {
 	q, args := dialectPG.sqlJoinCommits(branch, change, at, logSeq, seqs)
+	return t.writeBranchCommits(ctx, branch, q, args)
+}
+
+// writeBranchCommits runs a write of the commits a branch holds, the branch given its id first (branch_name); both wait
+// for the next statement when the transaction holds its writes.
+func (t *pgTx) writeBranchCommits(ctx context.Context, branch, q string, args []any) error {
+	eq, eargs := dialectPG.sqlEnsureBranchID(branch)
 	if t.held != nil {
+		if err := t.held.write(ctx, eq, eargs, "branch id"); err != nil {
+			return err
+		}
 		return t.held.write(ctx, q, args, "branch commits")
+	}
+	if _, err := t.tx.Exec(ctx, eq, eargs...); err != nil {
+		return mapErr(err, "branch id "+branch)
 	}
 	_, err := t.tx.Exec(ctx, q, args...)
 	return mapErr(err, "branch "+branch)
@@ -1935,9 +1948,5 @@ func (t *pgTx) LastCommit(ctx context.Context, branch string) (int64, error) {
 
 func (t *pgTx) TakeCommits(ctx context.Context, branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) error {
 	q, args := dialectPG.sqlTakeCommits(branch, change, logSeq, namespace, from, after, upTo)
-	if t.held != nil {
-		return t.held.write(ctx, q, args, "branch commits")
-	}
-	_, err := t.tx.Exec(ctx, q, args...)
-	return mapErr(err, "branch "+branch)
+	return t.writeBranchCommits(ctx, branch, q, args)
 }

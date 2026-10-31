@@ -112,10 +112,19 @@ func (d dialect) nodeCols() string {
 
 const nodeFrom = ` FROM node n JOIN node_version v ON v.node_id = n.id`
 
+// branchID is the id of the branch the expression name names (branch_name: branch_commit keeps the id, not the name),
+// null when no commit names it yet: a branch holding no commit.
+func branchID(name string) string { return `(SELECT id FROM branch_name WHERE name = ` + name + `)` }
+
+// sqlEnsureBranchID gives a branch its id (branch_name), before a commit names it.
+func (d dialect) sqlEnsureBranchID(branch string) (string, []any) {
+	return `INSERT INTO branch_name (name) VALUES (` + d.ph(1) + `) ON CONFLICT (name) DO NOTHING`, []any{domain.BranchOf(branch)}
+}
+
 // onBranchSQL selects the versions v that are part of the branch bound to the placeholder p: of a commit the branch
 // holds (ADR 0176).
 func onBranchSQL(p string) string {
-	return `EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + p + ` AND j.seq = v.committed)`
+	return `EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + branchID(p) + ` AND j.seq = v.committed)`
 }
 
 // sqlNode reads one version of a node.
@@ -138,7 +147,7 @@ func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
 // the history of a node many changes wrote. The probe of a commit is a fence (OFFSET 0): the planner never turns it
 // into a join, which would read every commit of the branch for each node when the statistics of branch_commit are old.
 func (d dialect) latestHeld(node, branch, after, upTo string) string {
-	probe := ` FROM branch_commit j WHERE j.branch = ` + branch + ` AND j.seq = v.committed`
+	probe := ` FROM branch_commit j WHERE j.branch = ` + branchID(branch) + ` AND j.seq = v.committed`
 	var held string
 	if after == "" {
 		held = `EXISTS (SELECT 1` + probe + d.fence() + `)`
@@ -149,7 +158,7 @@ func (d dialect) latestHeld(node, branch, after, upTo string) string {
 		held = `(SELECT j.at > ` + after + ` AND j.at <= ` + upTo + probe + `)`
 	}
 	bound := func(f string) string {
-		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branch + `)`
+		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branchID(branch) + `)`
 	}
 	return `(SELECT v.version FROM node_version v WHERE v.node_id = ` + node + ` AND v.committed BETWEEN ` + bound("min") +
 		` AND ` + bound("max") + ` AND ` + held + ` ORDER BY v.committed DESC, v.version DESC LIMIT 1)`
@@ -187,15 +196,15 @@ func (d dialect) sqlVersionRange(id domain.NodeID, before domain.Version, limit 
 // sqlVersionBranches reads the branches that took the commits of the versions of a node, from the version from up (0:
 // every version; ADR 0176).
 func (d dialect) sqlVersionBranches(id domain.NodeID, from domain.Version) (string, []any) {
-	return `SELECT v.version, j.branch FROM node_version v JOIN branch_commit j ON j.seq = v.committed
-		WHERE v.node_id = ` + d.ph(1) + ` AND v.version >= ` + d.ph(2) + ` AND j.branch <> v.branch ORDER BY j.branch`, []any{string(id), int(from)}
+	return `SELECT v.version, b.name FROM node_version v JOIN branch_commit j ON j.seq = v.committed JOIN branch_name b ON b.id = j.branch
+		WHERE v.node_id = ` + d.ph(1) + ` AND v.version >= ` + d.ph(2) + ` AND b.name <> v.branch ORDER BY b.name`, []any{string(id), int(from)}
 }
 
 // sqlVersionJoins reads the branches that took the commits of the versions of a node and the changes whose merge made
 // them take them (ADR 0133, 0176).
 func (d dialect) sqlVersionJoins(id domain.NodeID) (string, []any) {
-	return `SELECT v.version, j.branch, ` + d.id("j.change_id") + `, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed
-		WHERE v.node_id = ` + d.ph(1) + ` AND j.branch <> v.branch ORDER BY v.version, j.branch`, []any{string(id)}
+	return `SELECT v.version, b.name, ` + d.id("j.change_id") + `, j.log_seq FROM node_version v JOIN branch_commit j ON j.seq = v.committed
+		JOIN branch_name b ON b.id = j.branch WHERE v.node_id = ` + d.ph(1) + ` AND b.name <> v.branch ORDER BY v.version, b.name`, []any{string(id)}
 }
 
 // sqlNodeIDByKey reads the id of a node by its key.
@@ -267,7 +276,7 @@ func (d dialect) sqlCommittedVersions(namespace, branch string, after, upTo int6
 	return `SELECT ` + d.id("node_id") + `, version, deleted, reason, branch FROM (
 		SELECT v.node_id, v.version, v.deleted, v.reason, v.branch, row_number() OVER (PARTITION BY v.node_id ORDER BY v.version DESC) AS rn
 		FROM branch_commit j JOIN node_version v ON v.committed = j.seq JOIN node n ON n.id = v.node_id
-		WHERE j.branch = ` + d.ph(1) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) + ` AND n.namespace = ` + d.ph(4) + `
+		WHERE j.branch = ` + branchID(d.ph(1)) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) + ` AND n.namespace = ` + d.ph(4) + `
 	) y WHERE rn = 1`, args
 }
 
@@ -286,8 +295,8 @@ func (d dialect) sqlJoinedCommits(namespace, branch, except string, after, upTo 
 	if except != "" {
 		ex = domain.BranchOf(except)
 	}
-	return `SELECT j.seq FROM branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch = ` + d.ph(1) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) +
-			` AND c.namespace = ` + d.ph(5) + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + d.ph(4) + ` AND e.seq = j.seq` + d.fence() + `) ORDER BY j.seq`,
+	return `SELECT j.seq FROM branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch = ` + branchID(d.ph(1)) + ` AND j.at > ` + d.ph(2) + ` AND j.at <= ` + d.ph(3) +
+			` AND c.namespace = ` + d.ph(5) + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + branchID(d.ph(4)) + ` AND e.seq = j.seq` + d.fence() + `) ORDER BY j.seq`,
 		[]any{domain.BranchOf(branch), after, upTo, ex, domain.NamespaceOf(namespace)}
 }
 
@@ -321,8 +330,8 @@ func (d dialect) fence() string {
 func (d dialect) sqlTakeCommits(branch string, change domain.ChangeID, logSeq int64, namespace, from string, after, upTo int64) (string, []any) {
 	return `WITH n AS MATERIALIZED (SELECT nextval('commit_seq') AS at)
 		INSERT INTO branch_commit (branch, seq, at, change_id, log_seq)
-		SELECT $1, j.seq, n.at, $2, $3 FROM n, branch_commit j JOIN commits c ON c.seq = j.seq
-		WHERE j.branch = $4 AND j.at > $5 AND j.at <= $6 AND c.namespace = $7 ON CONFLICT DO NOTHING`,
+		SELECT ` + branchID("$1") + `, j.seq, n.at, $2, $3 FROM n, branch_commit j JOIN commits c ON c.seq = j.seq
+		WHERE j.branch = ` + branchID("$4") + ` AND j.at > $5 AND j.at <= $6 AND c.namespace = $7 ON CONFLICT DO NOTHING`,
 		[]any{domain.BranchOf(branch), string(change), nullSeq(logSeq), domain.BranchOf(from), after, upTo, domain.NamespaceOf(namespace)}
 }
 
@@ -330,11 +339,11 @@ func (d dialect) sqlTakeCommits(branch string, change domain.ChangeID, logSeq in
 // the list of their orders; a commit the branch took already keeps the order it was taken at.
 func (d dialect) sqlJoinCommits(branch string, change domain.ChangeID, at, logSeq int64, seqs []int64) (string, []any) {
 	if d.pg {
-		return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT $1, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`,
+		return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ` + branchID("$1") + `, s, $3, $2, $4 FROM unnest($5::bigint[]) AS s ON CONFLICT DO NOTHING`,
 			[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), seqs}
 	}
 	b, _ := json.Marshal(seqs)
-	return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ?1, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`,
+	return `INSERT INTO branch_commit (branch, seq, at, change_id, log_seq) SELECT ` + branchID("?1") + `, value, ?3, ?2, ?4 FROM json_each(?5) WHERE true ON CONFLICT DO NOTHING`,
 		[]any{domain.BranchOf(branch), string(change), at, nullSeq(logSeq), string(b)}
 }
 
@@ -362,7 +371,7 @@ func (d dialect) sqlNodeIDsOfType(namespace, typ string, after domain.NodeID, li
 
 // sqlLastCommit reads the order of the last commit a branch holds, its own or taken (branch_commit_at, ADR 0176).
 func (d dialect) sqlLastCommit(branch string) (string, []any) {
-	return `SELECT coalesce(max(at), 0) FROM branch_commit WHERE branch = ` + d.ph(1), []any{domain.BranchOf(branch)}
+	return `SELECT coalesce(max(at), 0) FROM branch_commit WHERE branch = ` + branchID(d.ph(1)), []any{domain.BranchOf(branch)}
 }
 
 // sqlBranchNodeIDs reads the nodes a branch holds a version of: of a commit it holds (ADR 0137, 0176), the versions of
@@ -378,10 +387,10 @@ func (d dialect) sqlBranchNodeIDs(branch, except string) (string, []any) {
 	}
 	if d.pg {
 		return `SELECT DISTINCT v.node_id::text FROM branch_commit j CROSS JOIN LATERAL (SELECT v.node_id FROM node_version v WHERE v.committed = j.seq OFFSET 0) v
-		WHERE j.branch = $1 AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = $2 AND e.seq = j.seq OFFSET 0)`, args
+		WHERE j.branch = ` + branchID("$1") + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + branchID("$2") + ` AND e.seq = j.seq OFFSET 0)`, args
 	}
 	return `SELECT DISTINCT v.node_id FROM branch_commit j JOIN node_version v ON v.committed = j.seq
-		WHERE j.branch = ?1 AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ?2 AND e.seq = j.seq)`, args
+		WHERE j.branch = ` + branchID("?1") + ` AND NOT EXISTS (SELECT 1 FROM branch_commit e WHERE e.branch = ` + branchID("?2") + ` AND e.seq = j.seq)`, args
 }
 
 // sqlPosition reads the position of a branch on its target (ADR 0177): the greatest order, on the target, of the
@@ -390,8 +399,8 @@ func (d dialect) sqlBranchNodeIDs(branch, except string) (string, []any) {
 func (d dialect) sqlPosition(branch, target string, forkSeq int64) (string, []any) {
 	// a scalar probe per row of the branch: a generic plan never reads the target's rows whole (they grow with it)
 	return `SELECT coalesce(max(x), 0) FROM (
-		SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + d.ph(2) + ` AND p.seq = b.seq) AS x FROM branch_commit b WHERE b.branch = ` + d.ph(1) + `
-		UNION ALL SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + d.ph(2) + ` AND p.seq = ` + d.ph(3) + `)
+		SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + branchID(d.ph(2)) + ` AND p.seq = b.seq) AS x FROM branch_commit b WHERE b.branch = ` + branchID(d.ph(1)) + `
+		UNION ALL SELECT (SELECT p.at FROM branch_commit p WHERE p.branch = ` + branchID(d.ph(2)) + ` AND p.seq = ` + d.ph(3) + `)
 	) y`, []any{domain.BranchOf(branch), domain.BranchOf(target), forkSeq}
 }
 
@@ -399,14 +408,14 @@ func (d dialect) sqlPosition(branch, target string, forkSeq int64) (string, []an
 // commits of its target it took and its own its target took), with no bound of order.
 func (d dialect) latestShared(node, branch, other string) string {
 	probe := func(b string) string {
-		s := `EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + b + ` AND j.seq = v.committed`
+		s := `EXISTS (SELECT 1 FROM branch_commit j WHERE j.branch = ` + branchID(b) + ` AND j.seq = v.committed`
 		if d.pg {
 			s += ` OFFSET 0`
 		}
 		return s + `)`
 	}
 	bound := func(f string) string {
-		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branch + `)`
+		return `(SELECT ` + f + `(k.seq) FROM branch_commit k WHERE k.branch = ` + branchID(branch) + `)`
 	}
 	return `(SELECT v.version FROM node_version v WHERE v.node_id = ` + node + ` AND v.committed BETWEEN ` + bound("min") +
 		` AND ` + bound("max") + ` AND ` + probe(branch) + ` AND ` + probe(other) + ` ORDER BY v.committed DESC, v.version DESC LIMIT 1)`
@@ -430,8 +439,8 @@ func (d dialect) sqlSharedVersions(namespace, branch, other string, ids []domain
 	}
 	return `SELECT ` + d.id("node_id") + `, version, deleted, reason, branch FROM (
 		SELECT v.node_id, v.version, v.deleted, v.reason, v.branch, row_number() OVER (PARTITION BY v.node_id ORDER BY v.version DESC) AS rn
-		FROM branch_commit j JOIN branch_commit o ON o.branch = ` + d.ph(2) + ` AND o.seq = j.seq JOIN node_version v ON v.committed = j.seq JOIN node n ON n.id = v.node_id
-		WHERE j.branch = ` + d.ph(1) + ` AND n.namespace = ` + d.ph(3) + `
+		FROM branch_commit j JOIN branch_commit o ON o.branch = ` + branchID(d.ph(2)) + ` AND o.seq = j.seq JOIN node_version v ON v.committed = j.seq JOIN node n ON n.id = v.node_id
+		WHERE j.branch = ` + branchID(d.ph(1)) + ` AND n.namespace = ` + d.ph(3) + `
 	) y WHERE rn = 1`, args
 }
 
@@ -693,7 +702,7 @@ func (d dialect) sqlStoreCounts(namespace string) map[string]string {
 		StatLinkDrops:        `SELECT l.type, count(*)` + links + ` AND l.removes IS NOT NULL GROUP BY l.type`,
 		StatLinkSetsByMode: `SELECT CASE WHEN v.links IS NOT NULL THEN '` + LinkSetShared + `' WHEN v.links_base IS NOT NULL THEN '` + LinkSetDelta +
 			`' ELSE '` + LinkSetOwn + `' END AS mode, count(*)` + versions + ` GROUP BY mode`,
-		StatJoins:           `SELECT '', count(*) FROM branch_commit j JOIN commits c ON c.seq = j.seq WHERE j.branch <> c.branch AND c.namespace = ` + ns,
+		StatJoins:           `SELECT '', count(*) FROM branch_commit j JOIN commits c ON c.seq = j.seq JOIN branch_name b ON b.id = j.branch WHERE b.name <> c.branch AND c.namespace = ` + ns,
 		StatCommitsByKind:   `SELECT kind, count(*) FROM commits WHERE namespace = ` + ns + ` GROUP BY kind`,
 		StatChangesByStatus: `SELECT status, count(*) FROM change WHERE namespace = ` + ns + ` GROUP BY status`,
 		StatChangeCounters: `SELECT s.key, sum(CAST(s.value AS integer)) FROM change c, ` + d.jsonEach("c.stats") + ` s WHERE c.namespace = ` + ns +
