@@ -17,10 +17,14 @@
   import { openDomain } from './domainTabs';
   import { formatDate } from '../../api';
   import SubscriptionsEditor from './SubscriptionsEditor.svelte';
+  import LifecyclePreview from '../../components/LifecyclePreview.svelte';
+  import { registry, type Lifecycle } from '../../api';
   import { eventIssues } from '../../subscriptions';
   import {
     walkSteps,
     goalChoices,
+    fromForm,
+    lifecycleToForm,
     ATTACH_MODES,
     type Section,
     type SectionItem,
@@ -47,6 +51,29 @@
   // the declared events checked as the compiler does, at once (ADR 0110)
   const eventProblems = $derived(Object.fromEntries(eventIssues(f.events).map((i) => [i.path ?? '', i.message ?? ''])));
   let root = $state<HTMLElement>();
+  // the lifecycle the maturity and the gates derive (ADR 0179), as the registry compiles the methodology being edited:
+  // the phases and the gates, the level 1 of the process; read again a moment after an edit
+  let derivedLc = $state<Lifecycle>();
+  $effect(() => {
+    if (!f.maturity.trim()) {
+      derivedLc = undefined;
+      return;
+    }
+    const { methodology } = fromForm(f);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      registry
+        .methodologyView(methodology, ctl.signal)
+        .then((r) => (derivedLc = r.view?.lifecycle as Lifecycle | undefined))
+        .catch(() => {
+          if (!ctl.signal.aborted) derivedLc = undefined;
+        });
+    }, 600);
+    return () => {
+      clearTimeout(timer);
+      ctl.abort();
+    };
+  });
 
   async function createNew() {
     const saved = await d.save();
@@ -294,6 +321,28 @@
               <input id="m-lifecycle" type="text" class="mono" bind:value={f.lifecycle} class:bad={d.bad('lifecycle')} data-path="lifecycle" placeholder="delivery" />
               <IssueHints draft={d} path="lifecycle" />
             </div>
+            <label class="label" for="m-maturity"
+              >Maturity <span class="opt"
+                >(instead of a lifecycle of a domain: the phases its changes go through, in order, as JSON; the gates of its processes move
+                the change from one to the next with <code>enters</code>, their decision sends it back with <code>backTo</code>, and the
+                lifecycle is derived from them)</span
+              ></label
+            >
+            <textarea
+              id="m-maturity"
+              class="mono"
+              rows="6"
+              bind:value={f.maturity}
+              class:bad={d.bad('maturity')}
+              data-path="maturity"
+              readonly={d.readonly}
+              placeholder={'{"phases": [{"name": "framing"}, {"name": "analysing"}, {"name": "delivered", "final": true}, {"name": "abandoned", "final": true, "exit": "abandon"}]}'}
+            ></textarea>
+            <IssueHints draft={d} path="maturity" />
+            {#if derivedLc}
+              <div class="label">Derived lifecycle <span class="opt">(the phases and the gates moving between them)</span></div>
+              <LifecyclePreview lc={lifecycleToForm(derivedLc)} />
+            {/if}
             <div class="label">Integrates <span class="opt">(the methodologies whose changes become its sub-changes)</span></div>
             {#each f.integrates as it, i (i)}
               <div class="integrate-row" class:bad={d.bad(`integrates[${i}]`)} data-path="integrates[{i}]">

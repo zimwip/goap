@@ -890,10 +890,18 @@ the state left editable), recorded on the transition fact; the graph refuses an 
 (`UpdateChange`) or a node of a frozen type (`work.checkTypeFreeze`; a candidate never written may still be
 withdrawn) while the move stands (`Change.InForceFreezes`). An agent with no `actions:` plans the gates too; a gate
 follows the gate before it by its `pre`. Choices of a decision point that are no flow: `OpenDecisionRequest.Choices`.
-`sdlc` 0.11.0 follows `alm`'s `maturity_of_change` (framing, analysing, designing, building, releasing, delivered,
+`sdlc` 0.12.0 states the same phases as its maturity (ADR 0179; before it followed `alm`'s `maturity_of_change`: framing, analysing, designing, building, releasing, delivered,
 abandoned): the framing confirmation, the analysis (a board by consent, the architecture attested), the design, the
 build and the delivery are gates, and the change commits delivered. The web edits a gate as JSON (*Gate* section of
 `StepEditor.svelte`, `parseGate` in `methodologyForm.ts`) and draws it as a chip of `StepNode.svelte`.
+A methodology may state the **maturity** of its changes instead of naming the lifecycle of a domain
+([ADR 0179](adr/0179-the-lifecycle-of-a-change-is-derived-from-its-methodology.md)): `maturity: {phases: [{name,
+final, notCommittable, exit}]}`, its gates moving the change between phases (`gate.enters`, `from`, `decision.backTo`).
+The lifecycle is derived (`Compiled.Lifecycle`: the phases its states, each gate its go and back, each `exit` a way out
+from every phase not final), named after the methodology, its guards the entry and checklist of each gate; the registry
+serves it to the graph unchanged (`registrysvc.Service.Lifecycle`, `WithGates`) and to the web
+(`MethodologyView.lifecycle`). A gate's decision is a person's by default; `decision: {by: script, code}` has a script
+rule it (an agent's ruling under the platform's decision policy). `sdlc` 0.12.0 states its maturity.
 A step may be declared a **review** ([ADR 0130](adr/0130-reviewing-steps.md)): `review: {subject, automatic}` names
 the subject it rates (`description`, `title`, `intent`, `impact:<key>`, `item:<key>`); an automatic review starts by
 itself, without anyone launching it, on the events of its subject (for a header subject: the change created, its fields

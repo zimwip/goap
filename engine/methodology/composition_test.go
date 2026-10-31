@@ -234,6 +234,10 @@ func TestCompositionOfTheRepository(t *testing.T) {
 		others[m.Name] = m
 	}
 	c := Composition{Others: others, Lifecycle: func(m *Methodology) *domain.Lifecycle {
+		if m.Maturity != nil {
+			cm, _ := m.CompileLenient()
+			return cm.Lifecycle()
+		}
 		for _, d := range ds {
 			if lc := d.Lifecycle(m.Lifecycle); lc != nil {
 				return lc

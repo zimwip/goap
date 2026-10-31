@@ -36,7 +36,7 @@
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
   import { loadMoveOffer, moveChangeTo } from '../../changeMove';
-  import { availableTransitions, decisionLabel, findLifecycle, judgedOf, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Judged, type Refusal, type TransitionOffer } from '../../changeTransition';
+  import { availableTransitions, changeLifecycle, decisionLabel, judgedOf, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Judged, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
   import CommitDialog from '../../components/CommitDialog.svelte';
@@ -508,12 +508,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     if (!name) return;
     const ctl = new AbortController();
     lcLoading = true;
-    findLifecycle(name, ns, ctl.signal)
+    changeLifecycle({ lifecycle: name, namespace: ns, methodology: change?.methodology, methodologyVersion: change?.methodologyVersion }, ctl.signal)
       .then((r) => {
         if (r) {
           lcDef = r.lc;
           lcDomain = r.domain;
-        } else lcFailure = `No domain defines the lifecycle “${name}”.`;
+        } else lcFailure = `Neither the methodology nor a domain defines the lifecycle “${name}”.`;
       })
       .catch((e) => {
         if (!ctl.signal.aborted) lcFailure = errorMessage(e);

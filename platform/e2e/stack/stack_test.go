@@ -167,7 +167,7 @@ func TestStack(t *testing.T) {
 			t.Fatalf("create: %v", err)
 		}
 		c := created.Msg.Change
-		if c.Lifecycle != "maturity_of_change" || c.State != "framing" || c.MethodologyVersion == "" || len(c.Guardians) == 0 {
+		if c.Lifecycle != "sdlc" || c.State != "framing" || c.MethodologyVersion == "" || len(c.Guardians) == 0 {
 			t.Fatalf("change follows %s@%s, lifecycle %q in %q, guardians %v", c.Methodology, c.MethodologyVersion, c.Lifecycle, c.State, c.Guardians)
 		}
 		// the framing is not confirmed: its gate refuses the analysis (a blackboard the registry could not read would be

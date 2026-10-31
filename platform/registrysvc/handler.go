@@ -139,6 +139,13 @@ func (h *Handler) GetMethodologyView(ctx context.Context, r *connect.Request[reg
 	out := &registryv1.GetMethodologyViewResponse{Issues: domainpb.IssuesToPB(issues)}
 	if c != nil {
 		out.View = MethodologyViewToPB(c.View())
+		// the lifecycle derived from the maturity (ADR 0179), as the graph enforces it: with the criteria of the gates
+		if lc := c.Lifecycle(); lc != nil {
+			if gated, err := WithGates(lc, c.Gates()); err == nil {
+				lc = gated
+			}
+			out.View.Lifecycle = domainpb.LifecyclesToPB([]domain.Lifecycle{*lc})[0]
+		}
 	}
 	return connect.NewResponse(out), nil
 }

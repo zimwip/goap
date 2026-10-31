@@ -255,5 +255,10 @@ func (s *Service) compositionIssues(ctx context.Context, m *methodology.Methodol
 		return nil
 	}
 	return m.CompositionIssues(methodology.Composition{Others: others,
-		Lifecycle: func(x *methodology.Methodology) *domain.Lifecycle { return lifecycleIn(domains, x) }})
+		Lifecycle: func(x *methodology.Methodology) *domain.Lifecycle {
+			if x.Maturity != nil {
+				return derivedLifecycle(x)
+			}
+			return lifecycleIn(domains, x)
+		}})
 }

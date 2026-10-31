@@ -301,6 +301,24 @@ export function resolveCall(
   return { offer, decision };
 }
 
+/** The lifecycle a change follows: the one its methodology derives from its maturity (ADR 0179), as the registry
+ * compiles the version the change follows (with the criteria of its gates), else the lifecycle of a domain it names
+ * (`findLifecycle`). `domain` names the methodology for a derived lifecycle: no domain states it. */
+export async function changeLifecycle(
+  change: { lifecycle?: string; namespace?: string; methodology?: string; methodologyVersion?: string },
+  signal?: AbortSignal,
+): Promise<{ lc: Lifecycle; domain: string } | undefined> {
+  const name = change.lifecycle ?? "";
+  if (!name) return undefined;
+  if (change.methodology && name === change.methodology) {
+    const view = (
+      await registry.storedMethodologyView(change.methodology, change.methodologyVersion ?? "", signal)
+    ).view;
+    if (view?.lifecycle?.name === name) return { lc: view.lifecycle as Lifecycle, domain: change.methodology };
+  }
+  return findLifecycle(name, change.namespace ?? "", signal);
+}
+
 /** The lifecycle of the domain of the namespace, else of any other domain (a built-in one for instance). */
 export async function findLifecycle(
   name: string,

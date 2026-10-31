@@ -12,7 +12,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Assessments: assessmentsToPB(m.Assessments), Domains: m.Domains, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Assessments: assessmentsToPB(m.Assessments), Domains: m.Domains, Maturity: maturityToPB(m.Maturity), Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
@@ -222,7 +222,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		return methodology.Methodology{}
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal,
-		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Assessments: assessmentsFromPB(p.Assessments), Domains: nilIfEmpty(p.Domains)}
+		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Assessments: assessmentsFromPB(p.Assessments), Domains: nilIfEmpty(p.Domains), Maturity: maturityFromPB(p.Maturity)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
 			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty})
@@ -353,12 +353,13 @@ func GateToPB(g *methodology.Gate) *registryv1.StepGate {
 	if g == nil {
 		return nil
 	}
-	out := &registryv1.StepGate{Transition: g.Transition}
+	out := &registryv1.StepGate{Transition: g.Transition, Enters: g.Enters, From: g.From}
 	for _, it := range g.Checklist {
 		out.Checklist = append(out.Checklist, &registryv1.GateItem{Name: it.Name, Description: it.Description, Role: it.Role, Veto: it.Veto, When: it.When, Attest: it.Attest})
 	}
 	if d := g.Decision; d != nil {
-		out.Decision = &registryv1.GateDecision{Question: d.Question, Back: d.Back, Board: d.Board, Rule: d.Rule, MaxDuration: d.MaxDuration}
+		out.Decision = &registryv1.GateDecision{Question: d.Question, Back: d.Back, Board: d.Board, Rule: d.Rule, MaxDuration: d.MaxDuration,
+			BackTo: d.BackTo, By: d.By, Code: d.Code}
 	}
 	if f := g.Freezes; f != nil {
 		out.Freezes = &registryv1.GateFreezes{Fields: f.Fields, Types: f.Types, Transitions: f.Transitions, KeepPhase: f.KeepPhase}
@@ -371,15 +372,39 @@ func GateFromPB(g *registryv1.StepGate) *methodology.Gate {
 	if g == nil {
 		return nil
 	}
-	out := &methodology.Gate{Transition: g.Transition}
+	out := &methodology.Gate{Transition: g.Transition, Enters: g.Enters, From: g.From}
 	for _, it := range g.Checklist {
 		out.Checklist = append(out.Checklist, methodology.GateItem{Name: it.Name, Description: it.Description, Role: it.Role, Veto: it.Veto, When: it.When, Attest: it.Attest})
 	}
 	if d := g.Decision; d != nil {
-		out.Decision = &methodology.GateDecision{Question: d.Question, Back: d.Back, Board: nilIfNone(d.Board), Rule: d.Rule, MaxDuration: d.MaxDuration}
+		out.Decision = &methodology.GateDecision{Question: d.Question, Back: d.Back, Board: nilIfNone(d.Board), Rule: d.Rule, MaxDuration: d.MaxDuration,
+			BackTo: d.BackTo, By: d.By, Code: d.Code}
 	}
 	if f := g.Freezes; f != nil {
 		out.Freezes = &domain.Freezes{Fields: nilIfNone(f.Fields), Types: nilIfNone(f.Types), Transitions: f.Transitions, KeepPhase: f.KeepPhase}
+	}
+	return out
+}
+
+// maturityToPB and maturityFromPB convert the maturity of a methodology (ADR 0179).
+func maturityToPB(m *methodology.Maturity) *registryv1.Maturity {
+	if m == nil {
+		return nil
+	}
+	out := &registryv1.Maturity{Description: m.Description}
+	for _, p := range m.Phases {
+		out.Phases = append(out.Phases, &registryv1.MaturityPhase{Name: p.Name, Description: p.Description, Final: p.Final, NotCommittable: p.NotCommittable, Exit: p.Exit})
+	}
+	return out
+}
+
+func maturityFromPB(m *registryv1.Maturity) *methodology.Maturity {
+	if m == nil {
+		return nil
+	}
+	out := &methodology.Maturity{Description: m.Description}
+	for _, p := range m.Phases {
+		out.Phases = append(out.Phases, methodology.Phase{Name: p.Name, Description: p.Description, Final: p.Final, NotCommittable: p.NotCommittable, Exit: p.Exit})
 	}
 	return out
 }

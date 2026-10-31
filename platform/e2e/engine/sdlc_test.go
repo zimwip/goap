@@ -128,13 +128,8 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.CommitID) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	// the changes follow the maturity of the alm domain, with the criteria of the gates of sdlc (ADR 0132)
-	var maturity *domain.Lifecycle
-	for _, d := range ds {
-		if lc := d.Lifecycle(m.Lifecycle); lc != nil {
-			maturity = lc
-		}
-	}
+	// the changes follow the lifecycle sdlc derives from its maturity (ADR 0179), with the criteria of its gates (ADR 0132)
+	maturity := cm.Lifecycle()
 	lc, err := registrysvc.WithGates(maturity, cm.Gates())
 	if err != nil {
 		t.Fatal(err)

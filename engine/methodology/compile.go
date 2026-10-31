@@ -115,6 +115,7 @@ func (s *compileState) add(path, format string, args ...any) {
 func (m *Methodology) compileWith(opt CompileOptions) (*Compiled, def.Issues) {
 	s := &compileState{m: m, known: map[string]bool{}, scopes: map[string]string{}, aggregates: map[string]Condition{}, actions: map[string]Action{}, goals: map[string]bool{}, agents: map[string]Agent{}}
 	s.checkHeader()
+	s.checkMaturity()
 	s.checkEvents()
 	s.compileConditions()
 	s.injectLibraries()
@@ -894,6 +895,7 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 	c := &Compiled{definition: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
 		methods: s.meths, methodGuards: mset, reactions: s.reactions, automaticReviews: s.automaticReviews, assessments: s.assessments,
 		gates: s.procs.gates, controls: s.controls}
+	c.lifecycle = c.buildLifecycle()
 	c.view = c.buildView()
 	return c, s.issues
 }

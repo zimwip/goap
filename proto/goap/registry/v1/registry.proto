@@ -562,6 +562,27 @@ message Methodology {
   // them; no change starts on it and no run reads it until a compatible version is published. Empty: in force. Set by
   // the registry, ignored on a write.
   string suspended = 32;
+  // the phases its changes go through (ADR 0179), in place of the lifecycle of a domain: their lifecycle is derived
+  // from them and from the gates of its processes
+  Maturity maturity = 33;
+}
+
+// The maturity of the changes of a methodology (ADR 0179): its phases, in order, the first the initial one.
+message Maturity {
+  string description = 1;
+  repeated MaturityPhase phases = 2;
+}
+
+// A phase of the maturity of a change: a state of the derived lifecycle.
+message MaturityPhase {
+  string name = 1;
+  string description = 2;
+  // a change merges and closes in a final phase only
+  bool final = 3;
+  // a change does not commit in this phase
+  bool not_committable = 4;
+  // a transition into this phase from every phase not final (abandon), with no gate
+  string exit = 5;
 }
 
 // AssessmentView is how the assessments of the subjects a pattern matches read (ADR 0116): the first state that holds wins.
@@ -736,6 +757,10 @@ message StepGate {
   repeated GateItem checklist = 2;
   GateDecision decision = 3;
   GateFreezes freezes = 4;
+  // the phase of the maturity the go enters, and the one it leaves (default: the phase before), ADR 0179; transition
+  // then only names the transition derived (default: the step's name)
+  string enters = 5;
+  string from = 6;
 }
 
 // An item of the checklist of a gate: a condition of the methodology, or an attestation of a person of its role.
@@ -763,6 +788,12 @@ message GateDecision {
   string rule = 4;
   // how long before it is escalated to the accountable role ("72h")
   string max_duration = 5;
+  // the phase of the maturity the decision may send the change back to (ADR 0179)
+  string back_to = 6;
+  // who decides: human (default, the board) or script (its code rules the point)
+  string by = 7;
+  // the JavaScript of a decision by script
+  string code = 8;
 }
 
 // What the go of a gate freezes beyond the impacts of the state it leaves.
@@ -1158,6 +1189,8 @@ message MethodologyView {
   repeated ViewActivity methods = 5;
   // every condition an entry, an exit or a goal of the view names, and their prerequisites
   map<string, ViewCondition> conditions = 6;
+  // the lifecycle its changes follow when it derives it from its maturity (ADR 0179), with the criteria of its gates
+  Lifecycle lifecycle = 7;
 }
 
 // A process or a method of a view.

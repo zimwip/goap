@@ -24,6 +24,18 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 		return nil, err
 	}
 	m := r.Methodology
+	if m.Maturity != nil {
+		// the lifecycle derived from the maturity and the gates of the methodology (ADR 0179): no domain names it
+		c, err := s.Methodology(ctx, methodology)
+		if err != nil {
+			return nil, fmt.Errorf("maturity of methodology %s: %w", m.Name, err)
+		}
+		lc := c.Lifecycle()
+		if lc == nil {
+			return nil, fmt.Errorf("methodology %s states a maturity with no phase: %w", m.Name, ErrInvalid)
+		}
+		return WithGates(lc, c.Gates())
+	}
 	if m.Lifecycle == "" {
 		return nil, nil
 	}
@@ -112,6 +124,15 @@ func mergeFreezes(a, b domain.Freezes) domain.Freezes {
 	}
 	return domain.Freezes{Fields: add(a.Fields, b.Fields), Types: add(a.Types, b.Types),
 		Transitions: a.Transitions || b.Transitions, KeepPhase: a.KeepPhase || b.KeepPhase}
+}
+
+// derivedLifecycle is the lifecycle a methodology derives from its maturity, as far as it compiles (nil: none).
+func derivedLifecycle(m *methodology.Methodology) *domain.Lifecycle {
+	c, _ := m.CompileLenient()
+	if c == nil {
+		return nil
+	}
+	return c.Lifecycle()
 }
 
 // lifecycleIn is the lifecycle m names among the domains: the one of its namespace, else of any domain (nil: none).

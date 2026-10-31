@@ -19,8 +19,13 @@ import (
 // The gate is organisation: it carries no action of its own; the engine opens its decision, people take it, the engine
 // carries out the move. How the decision is reached may be a method (the step's method: a capability).
 type Gate struct {
-	// Transition is the transition of the lifecycle of the change a go takes.
-	Transition string `yaml:"transition" json:"transition"`
+	// Transition is the transition of the lifecycle of the change a go takes. With a maturity (ADR 0179) it only names
+	// the transition the gate derives (default: the name of the step).
+	Transition string `yaml:"transition,omitempty" json:"transition,omitempty"`
+	// Enters is the phase of the maturity of the change the go enters (ADR 0179: the methodology states a maturity).
+	Enters string `yaml:"enters,omitempty" json:"enters,omitempty"`
+	// From is the phase the gate is passed from (default: the phase before the one it enters).
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
 	// Checklist are the items checked on the change before the decision.
 	Checklist []GateItem `yaml:"checklist,omitempty" json:"checklist,omitempty"`
 	// Decision says how the go is decided (nil: the accountable role of the step rules it alone).
@@ -50,8 +55,18 @@ type GateItem struct {
 type GateDecision struct {
 	// Question is asked by the decision point (default: "Go for <step>?").
 	Question string `yaml:"question,omitempty" json:"question,omitempty"`
-	// Back names a transition the decision may take instead (back to an earlier state): an option back.
+	// Back names a transition the decision may take instead (back to an earlier state): an option back. With a
+	// maturity it only names the transition back (default: back_<step>).
 	Back string `yaml:"back,omitempty" json:"back,omitempty"`
+	// BackTo is the phase of the maturity the decision may send the change back to (ADR 0179): an option back.
+	BackTo string `yaml:"backTo,omitempty" json:"backTo,omitempty"`
+	// By is who takes the decision (ADR 0179): human (default: the board, people in their seats) or script (the code
+	// of the gate rules it, an agent's ruling, which the policy of the point may leave to a ratification).
+	By string `yaml:"by,omitempty" json:"by,omitempty"`
+	// Code is the JavaScript ruling the decision when By is script: it reads the change and calls
+	// ctx.decide(point, "go" | "no_go" | "back", confidence, justification) on the open point of the gate
+	// (ctx.param("gate") names the gate).
+	Code string `yaml:"code,omitempty" json:"code,omitempty"`
 	// Board are the roles that sit on the decision (default: the accountable role of the step alone).
 	Board []string `yaml:"board,omitempty" json:"board,omitempty"`
 	// Rule settles the rulings of a board: unanimity (default), majority or consent.
@@ -59,6 +74,12 @@ type GateDecision struct {
 	// MaxDuration is how long the decision may take before it is escalated to the accountable role ("72h").
 	MaxDuration string `yaml:"maxDuration,omitempty" json:"maxDuration,omitempty"`
 }
+
+// Who takes the decision of a gate (GateDecision.By).
+const (
+	DecidedByHuman  = "human"
+	DecidedByScript = "script"
+)
 
 // MethodGate is how a gate step is done: its decision (ADR 0132).
 const MethodGate = "gate"
@@ -111,6 +132,14 @@ type GateInfo struct {
 	Back        string
 	MaxDuration string
 	Freezes     *domain.Freezes
+	// From, Enters and BackTo are the phases of the maturity the gate moves between (ADR 0179); empty: the
+	// methodology names the lifecycle of a domain.
+	From, Enters, BackTo string
+	// Entry is the entry of the gate step, part of the guard of its transition when the lifecycle is derived from the
+	// maturity (ADR 0179: the guard of a transition is the entry of its gate).
+	Entry map[string]bool
+	// By is who decides: human or script.
+	By string
 	// Method names the capability of the decision workflow (empty: the default decision).
 	Method string
 }
@@ -133,6 +162,10 @@ func (g GateInfo) Options() []string {
 
 // Policy are the values of the decision policy the decision point of the gate opens with (contracts/decision).
 func (g GateInfo) Policy() map[string]any {
+	if g.By == DecidedByScript {
+		// ruled by its code: an agent rules alone, no board
+		return map[string]any{"gate": g.Path, "transition": g.Transition, "decider": "agent"}
+	}
 	p := map[string]any{"gate": g.Path, "transition": g.Transition, "board": slices.Clone(g.Board), "chair": g.Accountable}
 	if g.Rule != "" {
 		p["rule"] = g.Rule
@@ -146,6 +179,10 @@ func (g GateInfo) Policy() map[string]any {
 // Criteria are the criteria the gate adds to its transition (ADR 0132 §2): its vetos and objectives, in the
 // environment of a guard (the world state, the change), and the decision, a veto: a decided go of its point.
 func (g GateInfo) Criteria() (vetos, objectives []domain.Criterion) {
+	for _, cond := range slices.Sorted(maps.Keys(g.Entry)) {
+		vetos = append(vetos, domain.Criterion{Name: "entry:" + cond, Description: "the entry of the gate: " + cond,
+			Expr: fmt.Sprintf("world[%q] == %t", cond, g.Entry[cond])})
+	}
 	for _, it := range g.Items {
 		expr := fmt.Sprintf("world[%q]", it.Condition)
 		if it.When != "" {
@@ -198,18 +235,44 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 	case s.Foreach != "" || s.Where != "" || s.Review != nil:
 		w.add(sp+".gate", "a gate is decided once: no foreach, where or review")
 		return nil
-	case w.m.Lifecycle == "":
-		w.add(sp+".gate", "a gate takes a transition of the lifecycle of the change: the methodology names none (lifecycle)")
+	case !w.m.HasLifecycle():
+		w.add(sp+".gate", "a gate takes a transition of the lifecycle of the change: the methodology names none (lifecycle) and states no maturity (maturity)")
 		return nil
-	case g.Transition == "":
+	case w.m.Maturity == nil && (g.Enters != "" || g.From != "" || (g.Decision != nil && g.Decision.BackTo != "")):
+		w.add(sp+".gate.enters", "enters, from and backTo name phases of a maturity: the methodology names the lifecycle of a domain, name its transitions")
+		return nil
+	case w.m.Maturity == nil && g.Transition == "":
 		w.add(sp+".gate.transition", "name the transition of the lifecycle of the change the go takes")
 		return nil
 	case len(s.Done) > 0:
 		w.add(sp+".done", "a gate is done once its transition is taken: no done of its own")
 		return nil
 	}
-	if w.gates[g.Transition] != "" {
-		w.add(sp+".gate.transition", "the transition %s is already the gate %s", g.Transition, w.gates[g.Transition])
+	var from, enters, backTo string
+	transition, back := g.Transition, ""
+	if g.Decision != nil {
+		back = g.Decision.Back
+	}
+	if w.m.Maturity != nil {
+		var ok bool
+		if from, enters, ok = w.gatePhases(sp, g); !ok {
+			return nil
+		}
+		if transition == "" {
+			transition = s.Name
+		}
+		if d := g.Decision; d != nil && d.BackTo != "" {
+			backTo = d.BackTo
+			if back == "" {
+				back = "back_" + s.Name
+			}
+		} else if back != "" {
+			w.add(sp+".gate.decision.back", "with a maturity, the decision goes back to a phase: name it (backTo)")
+			return nil
+		}
+	}
+	if w.gates[transition] != "" {
+		w.add(sp+".gate.transition", "the transition %s is already the gate %s", transition, w.gates[transition])
 		return nil
 	}
 	roles := s.Roles
@@ -217,8 +280,11 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 		w.add(sp+".roles.accountable", "a gate answers to an accountable role of its own (roles.accountable): it decides, or chairs the board")
 		return nil
 	}
-	info := GateInfo{Path: path, Transition: g.Transition, Accountable: roles.Accountable, Freezes: g.Freezes, Method: s.Capability,
-		Question: fmt.Sprintf("Go for %s?", s.Name)}
+	info := GateInfo{Path: path, Transition: transition, Accountable: roles.Accountable, Freezes: g.Freezes, Method: s.Capability,
+		Question: fmt.Sprintf("Go for %s?", s.Name), From: from, Enters: enters, BackTo: backTo, By: DecidedByHuman}
+	if w.m.Maturity != nil && len(need) > 0 {
+		info.Entry = maps.Clone(need)
+	}
 	if s.Description != "" {
 		info.Question = fmt.Sprintf("Go for %s (%s)?", s.Name, strings.TrimSuffix(s.Description, "."))
 	}
@@ -226,7 +292,25 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 		if d.Question != "" {
 			info.Question = d.Question
 		}
-		info.Back, info.Rule, info.MaxDuration, info.Board = d.Back, d.Rule, d.MaxDuration, slices.Clone(d.Board)
+		info.Back, info.Rule, info.MaxDuration, info.Board = back, d.Rule, d.MaxDuration, slices.Clone(d.Board)
+		switch d.By {
+		case "", DecidedByHuman:
+			if d.Code != "" {
+				w.add(sp+".gate.decision.code", "code rules a decision taken by a script (by: script)")
+			}
+		case DecidedByScript:
+			info.By = DecidedByScript
+			switch {
+			case d.Code == "":
+				w.add(sp+".gate.decision.code", "a script decides with code: write it (ctx.decide on the open point of the gate)")
+			case len(d.Board) > 0 || d.Rule != "":
+				w.add(sp+".gate.decision.by", "a board is people: a script decides alone (no board, no rule)")
+			case s.Capability != "":
+				w.add(sp+".gate.decision.by", "the decision is a method of the step or a script, not both")
+			}
+		default:
+			w.add(sp+".gate.decision.by", "a gate is decided by a human or a script, not %q", d.By)
+		}
 		if d.Rule != "" && !slices.Contains(gateRules, d.Rule) {
 			w.add(sp+".gate.decision.rule", "a board rules by unanimity, majority or consent, not %q", d.Rule)
 		}
@@ -238,11 +322,13 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 				w.add(fmt.Sprintf("%s.gate.decision.board[%d]", sp, j), "unknown role %q", r)
 			}
 		}
-		if d.Back == g.Transition {
+		if back != "" && back == transition {
 			w.add(sp+".gate.decision.back", "back names another transition than the one the go takes")
 		}
 	}
-	if len(info.Board) == 0 {
+	if info.By == DecidedByScript {
+		info.Board = nil
+	} else if len(info.Board) == 0 {
 		info.Board = []string{roles.Accountable}
 	} else if !slices.Contains(info.Board, roles.Accountable) {
 		info.Board = append(info.Board, roles.Accountable) // the accountable role sits on every board
@@ -307,8 +393,8 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 	}
 	passed, opened, went := GatePassed(path), GateOpen(path), GateGo(path)
 	for _, d := range []condition.Definition{
-		{Name: passed, Expr: fmt.Sprintf("%q in change.passed", g.Transition),
-			Description: fmt.Sprintf("the gate %s is passed: the change took %s and has not gone back since", path, g.Transition)},
+		{Name: passed, Expr: fmt.Sprintf("%q in change.passed", transition),
+			Description: fmt.Sprintf("the gate %s is passed: the change took %s and has not gone back since", path, transition)},
 		{Name: opened, Expr: fmt.Sprintf(`decisionPoints.exists(d, "gate" in d.policy && d.policy.gate == %q && d.status != "decided")`, path),
 			Description: fmt.Sprintf("the decision of the gate %s is open, waiting for its rulings", path)},
 		{Name: went, Expr: fmt.Sprintf(`decisionPoints.exists(d, "gate" in d.policy && d.policy.gate == %q && d.status == "decided" && d.option == %q && !(d.id in change.consumed))`, path, OptionGo),
@@ -317,7 +403,7 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 		w.known[d.Name] = true
 		w.out.conditions = append(w.out.conditions, d)
 	}
-	params := map[string]any{"gate": path, "transition": g.Transition}
+	params := map[string]any{"gate": path, "transition": transition}
 	if s.Capability != "" {
 		// the decision workflow is a method: run as a call once the decision is open, towards its go
 		candidates := w.m.methodsFor(s.Capability, w.methods.goals)
@@ -327,6 +413,11 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 		}
 		w.out.actions = append(w.out.actions, Action{Name: path + ":decide", Description: "Decide the gate " + path, Kind: KindCall,
 			Call: &Call{Capability: s.Capability}, Pre: with(open, opened, true), Effects: map[string]bool{went: true}, Cost: 1, Step: path})
+	} else if info.By == DecidedByScript {
+		// the decision is ruled by the code of the gate, an agent
+		w.out.actions = append(w.out.actions, Action{Name: RuleAction(path), Kind: KindScript, Description: "Rule the gate " + path + " by its script",
+			Language: LangJavaScript, Code: g.Decision.Code, Pre: with(open, opened, true), Effects: map[string]bool{went: true}, Cost: 1, Step: path, Incremental: true,
+			Params: map[string]any{"gate": path}})
 	} else {
 		// the default decision: the people of the board rule it, each in their seat, until its rule settles it
 		w.out.actions = append(w.out.actions, ruleAction(path, info, with(open, opened, true)))
@@ -336,7 +427,7 @@ func (w *stepWalker) gate(s Step, sp, path string, need map[string]bool) map[str
 			Incremental: true, Params: params, Pre: maps.Clone(open), Effects: map[string]bool{opened: true}, Cost: 1, Step: path},
 		Action{Name: path, Description: firstNonEmpty(s.Description, "Pass the gate "+path), Kind: KindBuiltin, Builtin: builtins.GatePass,
 			Params: params, Pre: with(need, went, true), Effects: map[string]bool{passed: true}, Cost: 1, Step: path})
-	w.gates[g.Transition] = path
+	w.gates[transition] = path
 	w.root.gates = append(w.root.gates, info)
 	return map[string]bool{passed: true}
 }

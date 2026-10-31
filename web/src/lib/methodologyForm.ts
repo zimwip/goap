@@ -6,7 +6,7 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, StepGate, Struct, Trigger, Visibility } from './api';
+import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Maturity, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, StepGate, Struct, Trigger, Visibility } from './api';
 import { SCRIPT_LANGUAGE } from './dsl';
 
 export interface CondRow {
@@ -475,6 +475,8 @@ export interface MethodologyForm {
   assessments: string;
   /** the lifecycle of its domain the changes follow (ADR 0058); "" : none */
   lifecycle: string;
+  /** the phases its changes go through (ADR 0179), as JSON: {description, phases: [{name, description, final, notCommittable, exit}]}; "" : none */
+  maturity: string;
   /** default criticality of its changes (ADR 0075 §3), kept as is */
   criticality: string;
   /** the methodologies whose changes its changes integrate (ADR 0106) */
@@ -676,6 +678,7 @@ export function emptyForm(): MethodologyForm {
     events: [],
     assessments: '',
     lifecycle: '',
+    maturity: '',
     criticality: '',
     integrates: [],
     guardianCommit: '',
@@ -1088,6 +1091,7 @@ export function toForm(m: Methodology): MethodologyForm {
     events: (m.events ?? []).map((e) => ({ name: e.name ?? '', description: e.description ?? '' })),
     assessments: m.assessments?.length ? JSON.stringify(m.assessments, null, 2) : '',
     lifecycle: m.lifecycle ?? '',
+    maturity: m.maturity ? JSON.stringify(m.maturity, null, 2) : '',
     criticality: m.criticality ?? '',
     integrates: (m.integrates ?? []).map((x) => ({ methodologies: (x.methodologies ?? []).join(', '), exclusive: !!x.exclusive, attach: x.attach === 'decision' ? '' : (x.attach ?? '') })),
     guardianCommit: m.guardian?.commit ?? '',
@@ -1514,6 +1518,15 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
     }
   }
   put(m, 'lifecycle', f.lifecycle.trim());
+  if (f.maturity.trim()) {
+    try {
+      const v: unknown = JSON.parse(f.maturity);
+      if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('an object {description, phases} expected');
+      m.maturity = v as Maturity;
+    } catch (e) {
+      issues.push({ path: 'maturity', message: `Invalid maturity JSON: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
   put(m, 'criticality', f.criticality.trim());
   put(
     m,

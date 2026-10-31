@@ -43,6 +43,9 @@ type Methodology struct {
 	// state. A step is tied to a state through its pre: "state:<name>" is a generated condition, true while the change
 	// is in that state, and the exit criteria of the steps (their done) are what a gate of the lifecycle asks for.
 	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+	// Maturity states the phases the changes go through (ADR 0179), in place of the lifecycle of a domain: their
+	// lifecycle is derived from it and from the gates of the processes (Compiled.Lifecycle).
+	Maturity *Maturity `yaml:"maturity,omitempty" json:"maturity,omitempty"`
 	// Criticality is the default criticality of the changes of the methodology (ADR 0075 §3): C1, C2 or C3, empty for
 	// the platform default (C2). The requester may raise it; lowering it asks the permission change:lower-criticality.
 	// What each level requires is the policy of the organisation, not of the methodology.
@@ -444,6 +447,8 @@ type Compiled struct {
 	automaticReviews map[string]string
 	// gates are the gates of the processes (ADR 0132)
 	gates []GateInfo
+	// lifecycle is the lifecycle derived from the maturity (ADR 0179); nil: none
+	lifecycle *domain.Lifecycle
 	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
 	assessments *condition.AssessmentViews
 	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation

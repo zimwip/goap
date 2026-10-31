@@ -574,6 +574,10 @@ export interface StepGate {
   checklist?: GateItem[];
   decision?: GateDecision;
   freezes?: GateFreezes;
+  /** the phase of the maturity the go enters (ADR 0179) */
+  enters?: string;
+  /** the phase the gate is passed from (default: the phase before the one it enters) */
+  from?: string;
 }
 
 /** An item of the checklist of a gate: a condition of the methodology, or an attestation of a person. */
@@ -599,6 +603,12 @@ export interface GateDecision {
   /** unanimity | majority | consent */
   rule?: string;
   maxDuration?: string;
+  /** the phase of the maturity a back decision sends the change to (ADR 0179) */
+  backTo?: string;
+  /** who decides: human (default, the board) or script */
+  by?: string;
+  /** the JavaScript of a decision by script */
+  code?: string;
 }
 
 /** What the go of a gate freezes beyond the impacts of the state it leaves. */
@@ -844,6 +854,8 @@ export interface Methodology {
   events?: MethodologyEvent[];
   /** the lifecycle of its domain the changes follow (ADR 0058); empty: none */
   lifecycle?: string;
+  /** the phases its changes go through (ADR 0179), in place of the lifecycle of a domain */
+  maturity?: Maturity;
   /** the version of each domain it is written against, by domain name: pinned at publication (ADR 0113) */
   domains?: Record<string, string>;
   /** the methodologies whose changes its changes integrate as sub-changes (ADR 0106) */
@@ -856,6 +868,23 @@ export interface Methodology {
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
+}
+
+/** The maturity of the changes of a methodology (ADR 0179): its phases in order; their lifecycle derives from it and
+ * from the gates of the processes. */
+export interface Maturity {
+  description?: string;
+  phases?: MaturityPhase[];
+}
+
+/** A phase of the maturity of a change: a state of the derived lifecycle. */
+export interface MaturityPhase {
+  name?: string;
+  description?: string;
+  final?: boolean;
+  notCommittable?: boolean;
+  /** a transition into this phase from every phase not final (abandon) */
+  exit?: string;
 }
 
 /** Methodologies whose changes the changes of a methodology integrate (ADR 0106). */

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.11.1
+version: 0.12.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -12,9 +12,19 @@ description: >
 
 namespace: alm
 goal: deliver
-# the phases of a change (ADR 0132): the gates of the delivery process take its transitions, framing → analysing →
-# designing → building → releasing → delivered; the change commits delivered
-lifecycle: maturity_of_change
+# the maturity of a change (ADR 0179): its phases, framing → analysing → designing → building → releasing → delivered;
+# the gates of the delivery process move it from one to the next (enters), their decision may send it back (backTo).
+# Its lifecycle is derived from them: no domain states it.
+maturity:
+  description: How a delivery change matures, from its framing to its delivery, phase by phase
+  phases:
+    - {name: framing, description: "The change is framed with its requester"}
+    - {name: analysing, description: "Its impacts, requirements and tests are analysed"}
+    - {name: designing, description: "Its solution is designed"}
+    - {name: building, description: "Its components are built"}
+    - {name: releasing, description: "Its releases are planned, reviewed and rolled out"}
+    - {name: delivered, final: true, description: "Delivered: the change commits"}
+    - {name: abandoned, final: true, exit: abandon, description: "Given up"}
 
 # the proofs of concept and prototypes it opens as its sub-changes (ADR 0131): the poc methodology, whose conclusion it
 # takes back (`poc.concluded` from an integrated change)
@@ -1543,6 +1553,7 @@ processes:
               - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
             gate:
               transition: analyse
+              enters: analysing
               checklist:
                 - {name: description_accepted, role: business_analyst, veto: true, description: "The description is rated acceptable"}
               decision: {question: "Is the change framed well enough to be analysed?"}
@@ -1573,13 +1584,14 @@ processes:
             roles: {accountable: product_owner, consulted: [solution_architect, tech_lead]}
             gate:
               transition: design
+              enters: designing
               checklist:
                 - {name: impact_analysis_validated, role: business_analyst, veto: true}
                 - {name: requirements_specified, role: business_analyst, veto: true}
                 - {name: architecture_compliant, role: solution_architect, attest: true, veto: true, description: "The change keeps to the target architecture"}
                 - {name: requirements_traced, role: business_analyst}
                 - {name: tests_planned, role: business_analyst}
-              decision: {board: [tech_lead, solution_architect, product_owner], rule: consent, back: reframe}
+              decision: {board: [tech_lead, solution_architect, product_owner], rule: consent, back: reframe, backTo: framing}
               freezes: {types: [alm@Requirement], transitions: true, keepPhase: true}
       - name: design
         description: Allocate the functions and design the solution, by the method that fits the change, once the analysis passed its gate
@@ -1591,9 +1603,10 @@ processes:
         roles: {accountable: tech_lead}
         gate:
           transition: build
+          enters: building
           checklist:
             - {name: design_checked, role: solution_architect, veto: true}
-          decision: {back: reanalyse}
+          decision: {back: reanalyse, backTo: analysing}
           freezes: {keepPhase: true}
       - name: proofs
         description: Prove what is uncertain by building the least that shows it, before investing in it (ADR 0131)
@@ -1627,10 +1640,11 @@ processes:
         roles: {accountable: change_approver}
         gate:
           transition: release
+          enters: releasing
           checklist:
             - {name: build_complete, role: developer, veto: true}
             - {name: risks_under_control, role: tech_lead, veto: true}
-          decision: {back: redesign}
+          decision: {back: redesign, backTo: designing}
           freezes: {keepPhase: true}
       - name: release
         description: Plan, note, review and roll out the releases, once the build passed its gate
@@ -1643,6 +1657,8 @@ processes:
         roles: {accountable: service_owner}
         gate:
           transition: deliver
+          enters: delivered
+          from: releasing
           checklist:
             - {name: rolled_out, role: release_manager, veto: true}
             - {name: requirements_approved, role: tech_lead, veto: true}

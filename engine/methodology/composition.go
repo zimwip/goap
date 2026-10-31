@@ -40,7 +40,7 @@ const maxComposedChain = 8
 const maxWorldRefs = 4
 
 func (c Composition) lifecycle(m *Methodology) *domain.Lifecycle {
-	if c.Lifecycle == nil || m == nil || m.Lifecycle == "" {
+	if c.Lifecycle == nil || m == nil || !m.HasLifecycle() {
 		return nil
 	}
 	return c.Lifecycle(m)
@@ -64,7 +64,7 @@ func (m *Methodology) CompositionIssues(c Composition) def.Issues {
 // gates: the transitions a gate takes and goes back by are transitions of the lifecycle of m (ADR 0132).
 func (ck *compositionCheck) gates() {
 	lc := ck.c.lifecycle(ck.m)
-	if lc == nil {
+	if lc == nil || ck.m.Maturity != nil { // a derived lifecycle holds the transitions of its gates by construction
 		return
 	}
 	var walk func(path string, steps []Step)
