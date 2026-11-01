@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
@@ -108,6 +109,15 @@ func main() {
 	memory := true
 	var smartTagStore smarttagsvc.Store = smarttagsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
+	// the payloads of the change logs are compressed with zstd unless GOAP_LOG_COMPRESS is 0 or false (ADR 0180 §2)
+	compressLog := true
+	if v := os.Getenv("GOAP_LOG_COMPRESS"); v != "" {
+		on, err := strconv.ParseBool(v)
+		if err != nil {
+			platform.Fatal(log, "GOAP_LOG_COMPRESS", err)
+		}
+		compressLog = on
+	}
 	if path := os.Getenv("GOAP_SQLITE_PATH"); path != "" && os.Getenv("GOAP_DB_DSN") == "" {
 		// a SQLite file (the local stack of goap-local): the graph and its smart tags in it, the
 		// reads on read-only connections
@@ -132,7 +142,9 @@ func main() {
 			platform.Fatal(log, "sqlite readers", err)
 		}
 		defer read.Close()
-		repo = graph.NewSQLite(db).WithReader(read)
+		lite := graph.NewSQLite(db).WithReader(read)
+		lite.CompressLog(compressLog)
+		repo = lite
 		memory = false
 		smartTagStore = smarttagsvc.SQLStore{DB: db}
 		srv.Readiness(db.PingContext)
@@ -144,6 +156,7 @@ func main() {
 			platform.Fatal(log, "migrate smart tags", err)
 		}
 		pg := graph.NewPostgres(pool)
+		pg.CompressLog(compressLog)
 		// the requests that only read run on read-only connections, with no BEGIN and COMMIT around them
 		read, err := platform.PostgresReader(ctx, pool)
 		if err != nil {

@@ -3,18 +3,13 @@ package graph
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/big"
-	"reflect"
-	"strconv"
 	"sync"
 	"time"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/klauspost/compress/dict"
 	"github.com/klauspost/compress/zstd"
 )
@@ -40,93 +35,8 @@ const (
 // zstdMagic starts every zstd frame: left out of a stored payload, which its first byte names already.
 var zstdMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
 
-var (
-	cborEnc cbor.EncMode
-	cborDec cbor.DecMode
-)
-
-func init() {
-	var err error
-	if cborEnc, err = cbor.CoreDetEncOptions().EncMode(); err != nil {
-		panic(err)
-	}
-	if cborDec, err = (cbor.DecOptions{
-		DefaultMapType:   reflect.TypeOf(map[string]any(nil)),
-		MaxNestedLevels:  256,
-		MaxArrayElements: 1 << 27,
-		MaxMapPairs:      1 << 27,
-	}).DecMode(); err != nil {
-		panic(err)
-	}
-}
-
-// jsonToCBOR encodes the JSON value j in deterministic CBOR, its UUIDs as tag 37.
-func jsonToCBOR(j []byte) ([]byte, error) {
-	d := json.NewDecoder(bytes.NewReader(j))
-	d.UseNumber()
-	var v any
-	if err := d.Decode(&v); err != nil {
-		return nil, fmt.Errorf("log payload: %w", err)
-	}
-	if d.More() {
-		return nil, errors.New("log payload: more than one JSON value")
-	}
-	v, err := toCBORValue(v)
-	if err != nil {
-		return nil, err
-	}
-	return cborEnc.Marshal(v)
-}
-
-func toCBORValue(v any) (any, error) {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, e := range x {
-			c, err := toCBORValue(e)
-			if err != nil {
-				return nil, err
-			}
-			x[k] = c
-		}
-	case []any:
-		for i, e := range x {
-			c, err := toCBORValue(e)
-			if err != nil {
-				return nil, err
-			}
-			x[i] = c
-		}
-	case string:
-		if b, ok := uuidBytes(x); ok {
-			return cbor.Tag{Number: cborTagUUID, Content: b}, nil
-		}
-	case json.Number:
-		return numberValue(string(x))
-	}
-	return v, nil
-}
-
-// numberValue is a JSON number as the CBOR value that gives it back: an integer as an integer (a big one as a bignum),
-// any other as a float64 (what Go's encoder wrote it from).
-func numberValue(s string) (any, error) {
-	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return i, nil
-	}
-	if u, err := strconv.ParseUint(s, 10, 64); err == nil {
-		return u, nil
-	}
-	if b, ok := new(big.Int).SetString(s, 10); ok {
-		return b, nil
-	}
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil, fmt.Errorf("log payload: number %q: %w", s, err)
-	}
-	return f, nil
-}
-
 // uuidBytes reads a UUID in its canonical form, lower case: only that form is given back as is.
-func uuidBytes(s string) ([]byte, bool) {
+func uuidBytes(s []byte) ([]byte, bool) {
 	if len(s) != 36 || s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
 		return nil, false
 	}
@@ -157,70 +67,6 @@ func lowerHex(c byte) (byte, bool) {
 		return c - 'a' + 10, true
 	}
 	return 0, false
-}
-
-func uuidString(b []byte) string {
-	var s [36]byte
-	hex.Encode(s[0:8], b[0:4])
-	s[8] = '-'
-	hex.Encode(s[9:13], b[4:6])
-	s[13] = '-'
-	hex.Encode(s[14:18], b[6:8])
-	s[18] = '-'
-	hex.Encode(s[19:23], b[8:10])
-	s[23] = '-'
-	hex.Encode(s[24:36], b[10:16])
-	return string(s[:])
-}
-
-// cborToJSON gives back the JSON of a CBOR payload.
-func cborToJSON(c []byte) ([]byte, error) {
-	var v any
-	if err := cborDec.Unmarshal(c, &v); err != nil {
-		return nil, fmt.Errorf("log payload: %w", err)
-	}
-	v, err := fromCBORValue(v)
-	if err != nil {
-		return nil, err
-	}
-	var buf bytes.Buffer
-	e := json.NewEncoder(&buf)
-	e.SetEscapeHTML(false)
-	if err := e.Encode(v); err != nil {
-		return nil, fmt.Errorf("log payload: %w", err)
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
-}
-
-func fromCBORValue(v any) (any, error) {
-	switch x := v.(type) {
-	case map[string]any:
-		for k, e := range x {
-			c, err := fromCBORValue(e)
-			if err != nil {
-				return nil, err
-			}
-			x[k] = c
-		}
-	case []any:
-		for i, e := range x {
-			c, err := fromCBORValue(e)
-			if err != nil {
-				return nil, err
-			}
-			x[i] = c
-		}
-	case cbor.Tag:
-		if b, ok := x.Content.([]byte); ok && x.Number == cborTagUUID && len(b) == 16 {
-			return uuidString(b), nil
-		}
-		return nil, fmt.Errorf("log payload: CBOR tag %d", x.Number)
-	case big.Int:
-		return &x, nil
-	case []byte:
-		return nil, errors.New("log payload: a CBOR byte string outside a UUID")
-	}
-	return v, nil
 }
 
 // logDict is a dictionary of log_dictionary: its id (the frames' dictionary id), its entry type and its bytes.
@@ -255,6 +101,8 @@ var (
 // logCodec encodes and decodes the payloads of a repository with its dictionaries.
 type logCodec struct {
 	store logDictStore
+	// plain leaves the payloads uncompressed: CBOR only, no dictionary trained (the compressed ones still read)
+	plain bool
 
 	mu       sync.RWMutex
 	loaded   bool
@@ -364,6 +212,9 @@ func (c *logCodec) encode(ctx context.Context, store logDictStore, typ string, j
 	raw, err := jsonToCBOR(j)
 	if err != nil {
 		return nil, err
+	}
+	if c.plain {
+		return append([]byte{payloadCBOR}, raw...), nil
 	}
 	c.mu.Lock()
 	enc := c.encoders[c.latest[typ]]

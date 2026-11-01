@@ -56,6 +56,12 @@ func (s *SQLite) WithReader(read *sql.DB) *SQLite {
 // errWrites stops a read-only transaction that writes: it runs again on the writer.
 var errWrites = errors.New("graph: a read-only transaction writes")
 
+// CompressLog says whether the payloads of the log are compressed (default) or kept as CBOR (ADR 0180 §2): the entries
+// written either way read the same.
+func (s *SQLite) CompressLog(on bool) {
+	s.log.plain = !on
+}
+
 // InTx implements Repo.
 func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if s.read != nil && (s.readAll || platform.IsReadOnly(ctx)) {
