@@ -161,11 +161,19 @@ func (q planned) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row 
 	return q.pgQuerier.QueryRow(ctx, sql, customPlan(sql, args)...)
 }
 
+// PostgresSettings are the session settings of the graph's connections: every statement runs with the generic plan
+// (plan_cache_mode). Left to choose, PostgreSQL planned the reads of links and versions again at each run, a custom
+// plan costing less than the generic one on paper (the size of their arrays known): half a millisecond to one of
+// planning for a few hundredths of execution, a third of the database's time on the lifecycle bench, for the plan the
+// generic one already is (read by key: node_version_pkey, link_from). A statement of customPlan, unnamed, is planned
+// at each run still, with the statistics of now.
+var PostgresSettings = map[string]string{"plan_cache_mode": "force_generic_plan"}
+
 // probesMark starts a statement reading its array one probe per element (dialect.eachProbe): planned once.
 const probesMark = "/* probes */"
 
-// customPlan asks pgx for a plan made with the values of a statement that reads an array of ids or matches a pattern
-// (an unnamed statement, planned at each run, its description cached); the others keep their prepared statement.
+// customPlan runs a statement that reads an array of ids or matches a pattern unnamed (planned at each run, with the
+// statistics of now, its description cached); the others, and those marked eachProbe, keep their prepared statement.
 func customPlan(sql string, args []any) []any {
 	if len(args) == 0 || strings.HasPrefix(sql, probesMark) || !(strings.Contains(sql, "unnest(") || strings.Contains(sql, "ANY(") || strings.Contains(sql, " LIKE ")) {
 		return args

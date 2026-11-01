@@ -636,13 +636,19 @@ any other append drops the reservation, so entries keep their order. A statement
 the statement sent with it. A statement carrying its own execution mode (`customPlan`)
 sends what is queued alone first.
 
-**Plans of the reads by array**: a statement reading an array of ids or matching a pattern is planned with its values
-at each run (`customPlan`: a generic plan does not know how many ids the array holds, and one settled on while the
-tables were small keeps reading them whole). A statement reading its array one probe per id, each a scalar subquery
-keyed on the id (`dialect.eachProbe`, `probeList`: the version of a node on a branch, at a commit, shared by two
-branches), keeps its prepared statement: its plan does not depend on the array, which it reads through a sub-select
-so that no plan knows its length, and the plan of each run, many times its execution, is saved. A join over the
-array (the links of versions, the links entering nodes) stays planned at each run. A probe reads its indexes only
+**Plans of the reads by array**: the graph's connections run every statement with its generic plan
+(`graph.PostgresSettings`, `plan_cache_mode = force_generic_plan`): left to choose, PostgreSQL planned the reads of
+links and versions again at each run, a plan knowing the size of the array costing less on paper, for the plan the
+generic one already is, a third of the database's time on the lifecycle bench. A statement reading an array of ids or
+matching a pattern runs unnamed (`customPlan`): planned at each run still, with the statistics of now (a prepared
+plan settled on while the tables were small kept reading them whole). A statement reading its array by key, marked
+`dialect.eachProbe`, keeps its prepared statement, its plan made once: one probe per id, each a scalar subquery keyed
+on the id (`probeList`: the version of a node on a branch, at a commit, shared by two branches), or the rows of the
+array read through a sub-select, each row of a table read by its key in a `LATERAL` sub-select fenced by `OFFSET 0`
+(`probeRefs`, `keyedVersions`, `heldLinksKeyed`: the links of versions, the links entering nodes, the link sets and
+the nodes of versions; `node_version` by its key, `link` by `link_from` or `link_to_type`). The fence is what makes
+the generic plan safe: a plan made when the tables were empty (the graph's first statements) would otherwise join
+them whole and keep doing so once they hold millions of rows; fenced, any plan reads them by key. A probe reads its indexes only
 (`latestHeld`, migration 0035): the walk of a node's versions by commit order takes the number of each from
 `node_version_node_committed (node_id, committed, version)`, and the order a branch took a commit at is read from
 `branch_commit_seq (seq, branch, at)` (migration 0036) and tested in the select list of its sub-select, once per version (a bound on it

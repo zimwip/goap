@@ -149,7 +149,7 @@ func main() {
 		smartTagStore = smarttagsvc.SQLStore{DB: db}
 		srv.Readiness(db.PingContext)
 		log.Info("storage", "sqlite", path)
-	} else if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
+	} else if pool := platform.OptionalPostgresWith(ctx, log, graph.Migrations, graph.PostgresSettings); pool != nil {
 		defer pool.Close()
 		// the smart tags select versions of this graph, in a store of their own (ADR 0143 §7)
 		if err := platform.Migrate(ctx, log, pool, smarttagsvc.Migrations, "migrations"); err != nil {
