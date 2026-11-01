@@ -828,7 +828,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if it.Type == domain.TypeDecisionPoint {
 				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
 			}
-			if it.Type == domain.TypeReview && domain.ReviewRecordOf(it.Data).Status == domain.ReviewStatusSubmitted {
+			if it.Type == domain.TypeReview && domain.ReviewDeltaOf(it.Data).Status == domain.ReviewStatusSubmitted {
 				return fmt.Errorf("a review is submitted with its verdicts, by ImpactNodeReviewBatch (ADR 0105): %w", ErrInvalid)
 			}
 			if it.Flow != batchFlow {

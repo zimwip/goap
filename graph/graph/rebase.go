@@ -104,33 +104,20 @@ func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, node
 }
 
 // reviewRebased reviews the nodes a rebase merged: the clean ones accepted by a review of graph.merge, the conflicting
-// ones sent back to proposed (why) for a person.
+// ones left proposed (the merge into their draft is an edit) for a person.
 func (g *Graph) reviewRebased(ctx context.Context, tx Tx, c domain.Change, nodes []rebasedNode, why string) error {
+	// the merge into each draft sent its review back to proposed (an edit after the verdict, derived by the fold, ADR
+	// 0105 addendum): the clean ones are accepted again, the conflicting ones wait for a person
 	var entries []domain.ReviewEntry
-	var accepted, reopened []domain.ImpactEvent
 	for _, n := range nodes {
 		if len(n.conflicts) == 0 {
 			entries = append(entries, domain.ReviewEntry{Impact: string(n.cn.ID), Comment: why, Outcome: domain.ReviewOutcomeAccept})
-			accepted = append(accepted, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactReviewed})
-		} else if n.cn.Review != domain.ReviewProposed {
-			r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: why}
-			reopened = append(reopened, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r})
 		}
 	}
-	if len(entries) > 0 {
-		key, cause, err := g.putReviewRecord(ctx, tx, c.ID, "graph.merge", why, entries)
-		if err != nil {
-			return err
-		}
-		for i := range accepted {
-			r := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now(), ReviewID: key}
-			accepted[i].By, accepted[i].Review, accepted[i].Causation = "graph.merge", &r, cause
-		}
-		if err := g.emit(ctx, tx, accepted...); err != nil {
-			return err
-		}
+	if len(entries) == 0 {
+		return nil
 	}
-	return g.emit(ctx, tx, reopened...)
+	return g.putReviewRecord(ctx, tx, c.ID, "graph.merge", entries)
 }
 
 // HeaderForkCommit is the field of a change.updated log entry that records the move of a rebase (ADR 0101).

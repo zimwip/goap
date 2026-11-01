@@ -281,8 +281,44 @@ func ApplyImpactEventAt(out []ChangeImpact, at int, e ImpactEvent) []ChangeImpac
 			cn.Post = &p
 		}
 	}
+	if e.Op == ImpactUpdated || (e.Op == ImpactCancelled && (cn.Intent == IntentModified || cn.Committed != nil)) {
+		cn = editedAgain(cn, e)
+	}
 	out[at] = cn
 	return out
+}
+
+// editedAgain is the review an edit of the content of a draft (an update, a rebase merging into it, a cancel) leaves:
+// a decided review was made on a draft that is gone, so the impact is proposed again (ADR 0102). It is derived, never
+// written (ADR 0105 addendum): the edit follows the verdict in the log.
+func editedAgain(cn ChangeImpact, e ImpactEvent) ChangeImpact {
+	if ReviewSeenOn(cn, e.Flow) == ReviewProposed {
+		return cn
+	}
+	comment := "edited again"
+	if r, ok := e.Patch["rebased"].(map[string]any); ok {
+		if b, _ := r["branch"].(string); b != "" {
+			comment = "rebased onto " + b // a rebase merged into the draft (ADR 0101, 0165)
+		}
+	}
+	cn.Reviews = append(slices.Clip(cn.Reviews), Review{Status: ReviewProposed, By: e.By, At: e.At, Comment: comment, Flow: e.Flow, Execution: e.Execution})
+	if e.Flow == "" {
+		cn.Review = ReviewProposed
+	}
+	return cn
+}
+
+// ReviewSeenOn is the review a change impact has for a flow: the last review made on that flow, else the one of the
+// impact (the main flow's).
+func ReviewSeenOn(cn ChangeImpact, flow string) NodeReview {
+	if flow != "" {
+		for i := len(cn.Reviews) - 1; i >= 0; i-- {
+			if r := cn.Reviews[i]; r.Flow == flow && !r.Superseded {
+				return r.Status
+			}
+		}
+	}
+	return cn.Review
 }
 
 func cloneImpact(cn ChangeImpact) ChangeImpact {

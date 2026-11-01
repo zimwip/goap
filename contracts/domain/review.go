@@ -26,14 +26,14 @@ type ImpactVerdict struct {
 	Comment string     // mandatory, as for a review on its own
 }
 
-// ReviewBatch is a set of reviews applied together (ADR 0080): all of them or none. ID is opaque to the graph, it only
-// stamps it on every review the batch writes (Review.ReviewID); Item, when set, is a fact written in the same
-// transaction once every verdict stood (the use case's record of the submission). Every verdict is made on Flow by By.
+// ReviewBatch is the submission of a review (ADR 0080): its verdicts stand all of them or none. ID names the review:
+// an open review of the change of that key is the one submitted (its entries must be the verdicts), else the graph
+// opens and submits one of the verdicts at once. Every verdict is made on Flow by By; the graph writes the submission
+// only, the verdicts are derived from it (ADR 0105 addendum).
 type ReviewBatch struct {
 	ID        string
 	Flow      string
 	Execution string
 	By        string
 	Verdicts  []ImpactVerdict
-	Item      *ChangeItem
 }

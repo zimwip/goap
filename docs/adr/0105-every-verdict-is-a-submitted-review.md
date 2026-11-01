@@ -56,3 +56,41 @@ with that outcome.
   their cause yet.
 - The engine makes one review per verdict of an action; grouping the verdicts of one action run in one review is
   possible (the batch takes several) but not done.
+
+## Addendum: a review is folded from its deltas, its verdicts derived
+
+A review item holds the gesture that wrote it, not the whole record, and a verdict is stored nowhere. Every change is a
+fold of its log, the impacts as much as the reviews: what the log says once is never said again.
+
+1. **A delta per gesture.** The data of a `review` item is a `domain.ReviewDelta`: the `key`, and what the gesture
+   sets. `status` opens the review (the first delta), submits it or discards it; `comment` replaces the global
+   comment; `by` names the author; `remove` drops entries; `entries` add entries, or set their `comment` and
+   `outcome`. A field the delta leaves out is kept. `ReviewUpdate` writes only what the edit changes, and
+   `ReviewSubmit` writes `{key, status: submitted}`. A review the graph submits on its own is one delta that opens and
+   submits it together: a single verdict, `CommitEdits`, the merges, the rebases. `domain.ReviewFold` folds the deltas.
+   The first delta of a key opens it, a delta of a final review is ignored, and the time of the delta that set an
+   outcome is the time of that verdict (`ReviewEntry.At`). `review.Reviews` and the web's `foldReviews` /
+   `ReviewFold` use the same fold.
+2. **The submission decides the verdicts.** `ImpactNodeReviewBatch` judges every verdict as before: the policy, the
+   gate of an acceptance, the origins settled by the same batch, and an impact no longer proposed is refused. All of
+   them stand or none does, and then it writes one entry, the submitting delta. The verdicts are
+   `ReviewState.Verdicts`, derived when the view of the change folds that entry (`draftState.review`). There is one
+   `reviewed` event per decided entry, at the position of the submission and caused by it, carrying the time of its
+   outcome, the comment `ReviewEffectiveComment(global, entry)`, the submitter (or the entry's `by`: a merge carrying
+   a sub-change's verdict) and the review's key. The batch names its review by `ID`: an open review of that key is the
+   one submitted, and its entries must be the verdicts; else the graph opens and submits one. The batch no longer
+   carries an item (`ImpactNodeReviewBatchRequest.item` is gone). A review the graph submits is written once the
+   impacts it decides are declared, between the declarations and the commit.
+3. **Proposed again is derived too.** An edit of a draft after its verdict sends the review back to `proposed`:
+   `domain.ApplyImpactEventAt` does it on an `updated` event, and on a `cancelled` one when the impact remains. This
+   covers a property, the owner, a link, the merge a rebase writes into the draft, and a cancel. The edit comes after
+   the verdict in the log; no `reviewed` entry is written for it. A rebase that merged cleanly is accepted again by its
+   `graph.merge` review; one with conflicts stays proposed. The `proposed` event that identifies a potential impact is
+   an action and stays one. So do the explicit reopenings: `ReopenImpacts`, and a lifecycle going back to a state.
+4. **Readers.** Whoever reads the log folds the review deltas with it and derives the verdicts. That covers the view of
+   the change, the graph tests (`impactEvents`; `checkVerdictCauses` now checks that no decided `reviewed` entry is
+   stored), the PROV-O export (`builder.review`), and the web's audit trail and history of sub-changes, which ask for
+   `fact.review` with `impact.`.
+
+On the lifecycle bench, this removes one `impact.reviewed` entry per verdict, and a review is no longer copied whole by
+each of its versions.

@@ -23,7 +23,7 @@
     const ids = members.map((m) => m.id).filter(Boolean);
     for (const id of ids) stamp(keyOf.change(id)); // any of them moved: read again
     const ctrl = new AbortController();
-    Promise.all(ids.map((id) => graph.listChangeLog({ changeId: id, types: ['impact.'] }, ctrl.signal).then((r) => [id, r.entries ?? []] as const)))
+    Promise.all(ids.map((id) => graph.listChangeLog({ changeId: id, types: ['impact.', 'fact.review'] }, ctrl.signal).then((r) => [id, r.entries ?? []] as const)))
       .then((all) => {
         logs = new Map(all);
         error = '';

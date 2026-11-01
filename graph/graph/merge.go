@@ -646,16 +646,10 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		return why
 	}
 	impactIDs := make([]domain.ChangeImpactID, len(todo))
-	var reviewKey, cause string
-	if len(todo) > 0 {
-		entries := make([]domain.ReviewEntry, len(todo))
-		for i, m := range todo {
-			impactIDs[i] = domain.ChangeImpactID(g.newID())
-			entries[i] = domain.ReviewEntry{Impact: string(impactIDs[i]), Comment: whyOf(m), Outcome: domain.ReviewOutcomeAccept}
-		}
-		if reviewKey, cause, err = g.putReviewRecord(ctx, tx, c.ID, "graph.merge", fmt.Sprintf("merge of %s into %s", in.From, plan.Into), entries); err != nil {
-			return res, err
-		}
+	entries := make([]domain.ReviewEntry, len(todo))
+	for i, m := range todo {
+		impactIDs[i] = domain.ChangeImpactID(g.newID())
+		entries[i] = domain.ReviewEntry{Impact: string(impactIDs[i]), Comment: whyOf(m), Outcome: domain.ReviewOutcomeAccept}
 	}
 	var stuck []string
 	var phases [4][]domain.ImpactEvent
@@ -701,7 +695,6 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		// target is a created event (the impact and its version), one it modifies is proposed, then written
 		declared := cn
 		declared.Review = domain.ReviewProposed
-		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now(), ReviewID: reviewKey}
 		first := domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactProposed, By: "graph.merge", State: &declared}
 		var written []domain.ImpactEvent
 		if cn.Intent == domain.IntentCreated {
@@ -709,9 +702,9 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		} else {
 			written = append(written, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, By: "graph.merge", Post: &m.next})
 		}
-		// by phase, so that the verdicts of the review and the versions of the commit are one entry each (ADR 0144)
+		// by phase, so that the declarations and the versions of the commit are one entry each (ADR 0144); the review
+		// accepting them is written between, the verdicts derived from it (ADR 0105 addendum)
 		phases[0] = append(phases[0], first)
-		phases[1] = append(phases[1], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause})
 		phases[2] = append(phases[2], written...)
 		phases[3] = append(phases[3], domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, By: "graph.merge", Committed: &m.next, Commit: res.Commit.ID, Branch: domain.BranchOf(plan.Into)})
 		res.merged = append(res.merged, n)
@@ -794,9 +787,15 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		plans[m.next.ID] = p
 	}
-	for _, events := range phases[:3] {
+	for i, events := range phases[:3] {
 		if err := g.emit(ctx, tx, events...); err != nil {
 			return res, err
+		}
+		if i == 0 && len(entries) > 0 {
+			// the merge accepts what it commits in one review, once its impacts are declared (ADR 0105)
+			if err := g.putReviewRecord(ctx, tx, c.ID, "graph.merge", entries); err != nil {
+				return res, err
+			}
 		}
 	}
 	// the entry of the commit of the merge, its position reserved first: its versions name it, the commits the target

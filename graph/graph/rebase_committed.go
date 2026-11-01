@@ -354,28 +354,28 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(),
 			Comment: strings.TrimSpace(fmt.Sprintf("merged from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
 		todo = append(todo, committedIn{events: events, id: id, ref: ref, review: r, effect: effect})
-		entries = append(entries, domain.ReviewEntry{Impact: string(id), Comment: r.Comment, Outcome: domain.ReviewOutcomeAccept})
+		entries = append(entries, domain.ReviewEntry{Impact: string(id), Comment: r.Comment, Outcome: domain.ReviewOutcomeAccept, By: r.By})
 	}
 	if len(todo) > 0 {
-		key, cause, err := g.putReviewRecord(ctx, tx, parent.ID, "graph.merge", fmt.Sprintf("merge of sub-change %s (%s)", c.Title, c.ID), entries)
-		if err != nil {
-			return err
-		}
-		// by phase, so that the verdicts of the review and the versions of the commit are one entry each (ADR 0144)
+		// by phase, so that the declarations and the versions of the commit are one entry each (ADR 0144); the review
+		// accepting them is written between, the verdicts derived from it (ADR 0105 addendum)
 		var phases [3][]domain.ImpactEvent
 		for _, t := range todo {
-			r := t.review
-			r.ReviewID = key
 			ref, effect := t.ref, t.effect
 			phases[0] = append(phases[0], t.events...)
-			phases[1] = append(phases[1], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause})
 			phases[2] = append(phases[2], domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Branch: domain.BranchOf(parent.Branch)})
 		}
-		for _, events := range phases {
+		for i, events := range phases {
 			if err := g.emit(ctx, tx, events...); err != nil {
 				return err
 			}
+			if i == 0 {
+				if err := g.putReviewRecord(ctx, tx, parent.ID, "graph.merge", entries); err != nil {
+					return err
+				}
+			}
 		}
+		var err error
 		// the counters of the parent count the work it now holds
 		if parent, err = tx.Change(ctx, parent.ID); err != nil {
 			return err

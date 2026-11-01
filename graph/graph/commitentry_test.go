@@ -9,8 +9,8 @@ import (
 )
 
 // A commit is one event of the log naming the nodes it commits (ADR 0144 addendum): the versions its change wrote are
-// left to the version store and read back from it, so are the ones the change's merge into main takes. Each verdict of
-// a review is an entry of its own (an acceptance is of one impact), the review submitted one fact.
+// left to the version store and read back from it, so are the ones the change's merge into main takes. A verdict is
+// stored nowhere: the view derives it from the submission of its review (ADR 0105 addendum).
 func TestCommitIsOneEvent(t *testing.T) { forEachRepo(t, testCommitIsOneEvent) }
 
 func testCommitIsOneEvent(t *testing.T, repo Repo) {
@@ -46,13 +46,10 @@ func testCommitIsOneEvent(t *testing.T, repo Repo) {
 			}
 		case domain.LogImpact + "." + string(domain.ImpactReviewed):
 			verdicts++
-			if strings.Contains(string(l.Payload), `"impacts"`) {
-				t.Errorf("a verdict is an entry of its own: %s", l.Payload)
-			}
 		}
 	}
-	if verdicts != 2 {
-		t.Fatalf("one entry per verdict: %d", verdicts)
+	if verdicts != 0 {
+		t.Fatalf("a verdict is derived from the submission of its review, never stored: %d", verdicts)
 	}
 	if commits != 2 {
 		t.Fatalf("the commit and the merge into main are one event each: %d", commits)

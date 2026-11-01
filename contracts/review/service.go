@@ -97,25 +97,41 @@ func (s Service) Open(ctx context.Context, change domain.ChangeID, flow, comment
 		return Review{}, err
 	}
 	flow = c.ResolveFlow(flow)
-	r := Review{Key: s.newKey(), Flow: flow, Comment: strings.TrimSpace(comment), Status: Open, By: who.Subject, Entries: []Entry{}}
-	return s.write(ctx, change, r, who)
+	d := domain.ReviewDelta{Key: s.newKey(), Status: Open, By: who.Subject}
+	if comment = strings.TrimSpace(comment); comment != "" {
+		d.Comment = &comment
+	}
+	return s.write(ctx, c, flow, d, who)
 }
 
 // Update changes an open review: only its author or an administrator, and only while it is open. The impacts it adds
-// must await review on its flow and be in no other open review of the flow.
+// must await review on its flow and be in no other open review of the flow. It writes what the edit changes only (a
+// delta, ADR 0105 addendum): the fold of the deltas is the review.
 func (s Service) Update(ctx context.Context, change domain.ChangeID, key string, e Edit, who Actor) (Review, error) {
 	c, r, err := s.load(ctx, change, key, who)
 	if err != nil {
 		return Review{}, err
 	}
+	d := domain.ReviewDelta{Key: key}
 	if e.Comment != nil {
-		r.Comment = strings.TrimSpace(*e.Comment)
+		comment := strings.TrimSpace(*e.Comment)
+		d.Comment = &comment
 	}
 	for _, imp := range e.Remove {
 		if _, ok := r.Entry(imp); !ok {
 			return Review{}, invalid("impact %s is not in review %s", imp, key)
 		}
 		r.Entries = slices.DeleteFunc(slices.Clone(r.Entries), func(x Entry) bool { return x.Impact == imp })
+		d.Remove = append(d.Remove, imp)
+	}
+	edits := map[string]int{} // position of an impact's edit in d.Entries
+	edit := func(imp string) *domain.ReviewEntryEdit {
+		if i, ok := edits[imp]; ok {
+			return &d.Entries[i]
+		}
+		edits[imp] = len(d.Entries)
+		d.Entries = append(d.Entries, domain.ReviewEntryEdit{Impact: imp})
+		return &d.Entries[len(d.Entries)-1]
 	}
 	if len(e.Add) > 0 {
 		reviews := Reviews(c.Items)
@@ -123,7 +139,6 @@ func (s Service) Update(ctx context.Context, change domain.ChangeID, key string,
 		for _, cn := range Awaiting(c, r.Flow, reviews, key) {
 			awaiting[string(cn.ID)] = cn
 		}
-		r.Entries = slices.Clone(r.Entries)
 		for _, imp := range e.Add {
 			if _, ok := r.Entry(imp); ok {
 				continue // already in: adding is idempotent
@@ -131,26 +146,28 @@ func (s Service) Update(ctx context.Context, change domain.ChangeID, key string,
 			if _, ok := awaiting[imp]; !ok {
 				return Review{}, s.whyNotAwaiting(c, r.Flow, reviews, key, imp)
 			}
-			r.Entries = append(r.Entries, Entry{Impact: imp})
+			r.Entries = append(slices.Clone(r.Entries), Entry{Impact: imp})
+			edit(imp)
 		}
 	}
 	for _, ee := range e.Entries {
-		i := slices.IndexFunc(r.Entries, func(x Entry) bool { return x.Impact == ee.Impact })
-		if i < 0 {
+		if _, ok := r.Entry(ee.Impact); !ok {
 			return Review{}, invalid("impact %s is not in review %s", ee.Impact, key)
 		}
-		r.Entries = slices.Clone(r.Entries)
+		x := edit(ee.Impact)
 		if ee.Comment != nil {
-			r.Entries[i].Comment = strings.TrimSpace(*ee.Comment)
+			comment := strings.TrimSpace(*ee.Comment)
+			x.Comment = &comment
 		}
 		if ee.Outcome != nil {
 			if o := *ee.Outcome; o != "" && o != Accept && o != Reject {
 				return Review{}, invalid("outcome of %s must be %s or %s", ee.Impact, Accept, Reject)
 			}
-			r.Entries[i].Outcome = *ee.Outcome
+			o := *ee.Outcome
+			x.Outcome = &o
 		}
 	}
-	return s.write(ctx, change, r, who)
+	return s.write(ctx, c, r.Flow, d, who)
 }
 
 // whyNotAwaiting is the refusal of an impact that cannot join a review.
@@ -171,17 +188,17 @@ func (s Service) whyNotAwaiting(c domain.Change, flow string, reviews []Review, 
 
 // Discard drops an open review: a review that was never submitted stays in the log, final.
 func (s Service) Discard(ctx context.Context, change domain.ChangeID, key string, who Actor) (Review, error) {
-	_, r, err := s.load(ctx, change, key, who)
+	c, r, err := s.load(ctx, change, key, who)
 	if err != nil {
 		return Review{}, err
 	}
-	r.Status = Discarded
-	return s.write(ctx, change, r, who)
+	return s.write(ctx, c, r.Flow, domain.ReviewDelta{Key: key, Status: Discarded}, who)
 }
 
-// Submit applies every entry as a review of its change impact, by the submitter, with the entry's comment and the
-// global one: in one transaction, all of them or none. A refusal names the entry and leaves the review open. The
-// review item becomes submitted, final.
+// Submit decides every entry as a review of its change impact, by the submitter, with the entry's comment and the
+// global one: in one transaction, all of them or none. A refusal names the entry and leaves the review open. The graph
+// writes the submission only (ADR 0105 addendum): the review becomes submitted, final, and the view of the change
+// derives the verdicts from it.
 func (s Service) Submit(ctx context.Context, change domain.ChangeID, key string, who Actor) (Review, error) {
 	_, r, err := s.load(ctx, change, key, who)
 	if err != nil {
@@ -205,9 +222,6 @@ func (s Service) Submit(ctx context.Context, change domain.ChangeID, key string,
 		}
 		b.Verdicts = append(b.Verdicts, domain.ImpactVerdict{Impact: domain.ChangeImpactID(e.Impact), Status: status, Comment: comment})
 	}
-	r.Status, r.SubmittedAt = Submitted, s.now()
-	it := domain.ChangeItem{Type: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
-	b.Item = &it
 	if _, err := s.Port.ImpactNodeReviewBatch(ctx, change, b); err != nil {
 		return Review{}, err
 	}
@@ -238,19 +252,21 @@ func (s Service) load(ctx context.Context, change domain.ChangeID, key string, w
 	return c, r, nil
 }
 
-// write stores a version of the review as an item and returns what the change then folds it to.
-func (s Service) write(ctx context.Context, change domain.ChangeID, r Review, who Actor) (Review, error) {
-	it := domain.ChangeItem{Type: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
-	items, err := s.Port.AddItems(ctx, change, []domain.ChangeItem{it})
+// write stores a delta of a review as an item and returns the review the change then folds to.
+func (s Service) write(ctx context.Context, c domain.Change, flow string, d domain.ReviewDelta, who Actor) (Review, error) {
+	it := domain.ChangeItem{Type: KindReview, Flow: flowArg(flow), Data: d.Data(), ProducedBy: who.Subject}
+	items, err := s.Port.AddItems(ctx, c.ID, []domain.ChangeItem{it})
 	if err != nil {
 		return Review{}, err
 	}
 	// the review as the item put it: the write is the truth
-	out := Reviews(items)
-	if len(out) == 0 {
-		return r, nil
+	f := domain.ReviewsOf(c.Items)
+	for _, x := range items {
+		f.Apply(x)
 	}
-	got := out[0]
-	got.Versions = r.Versions + 1
-	return got, nil
+	got, ok := f.Get(d.Key)
+	if !ok {
+		return Review{}, fmt.Errorf("%w: review %s of change %s", ErrNotFound, d.Key, c.ID)
+	}
+	return reviewOf(got), nil
 }

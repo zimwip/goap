@@ -5,7 +5,7 @@
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
 import { refKey } from "./lnk";
-import { foldReviews, tally } from "./reviews";
+import { foldReviews, ReviewFold, reviewVerdicts, tally } from "./reviews";
 import { isEphemeralBranch } from "./namespace";
 import {
   decodeImpactEvents,
@@ -20,6 +20,7 @@ import {
   type JsonValue,
   type LogEntry,
   type NodeRef,
+  type ReviewRecord,
 } from "./api";
 
 export type AuditSource =
@@ -419,7 +420,11 @@ function fromHeader(l: LogEntry): Entry {
   };
 }
 
-function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
+function fromItem(
+  it: ChangeItem,
+  parents: Map<string, string>,
+  folded?: ReviewRecord,
+): Entry {
   const base = {
     key: `i:${it.id}`,
     at: it.createdAt ?? "",
@@ -475,8 +480,9 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
     };
   }
   if (it.type === "review") {
-    // a version of a review object (ADR 0080): opened, edited, then submitted or discarded
-    const r = foldReviews([it])[0];
+    // a delta of a review object (ADR 0080, 0105 addendum): opened, edited, then submitted or discarded; shown as the
+    // review stands after it
+    const r = folded ?? foldReviews([it])[0];
     if (r) {
       const t = tally(r);
       return {
@@ -537,6 +543,7 @@ export function buildTrail(
   withChange = true,
 ): AuditEntry[] {
   const keys = new Map<string, string>();
+  const reviews = new ReviewFold();
   for (const cn of change.nodes ?? []) keys.set(cn.id ?? "", cn.key ?? "");
   const out: AuditEntry[] = [];
   if (withChange && change.createdAt) {
@@ -575,7 +582,21 @@ export function buildTrail(
     if (l.type?.startsWith("journal."))
       e = fromRecord(decodeLogEntry<ExecutionRecord>(l));
     else if (l.type?.startsWith("change.")) e = fromHeader(l);
-    else e = fromItem(decodeLogEntry<ChangeItem>(l), parents);
+    else {
+      const it = decodeLogEntry<ChangeItem>(l);
+      const { review, submitted } = reviews.apply(it);
+      e = fromItem(it, parents, review);
+      if (submitted && review) {
+        // the verdicts the submission decides: derived, never stored (ADR 0105 addendum)
+        out.push({ ...e, seq: int(l.seq) });
+        for (const v of reviewVerdicts(review, it, l.changeId, int(l.seq)))
+          out.push({
+            ...fromEvent(v as unknown as ImpactEvent, keys, parents),
+            seq: int(l.seq),
+          });
+        continue;
+      }
+    }
     out.push({ ...e, seq: int(l.seq) });
   }
   return out;

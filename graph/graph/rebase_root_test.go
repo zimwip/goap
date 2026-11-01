@@ -187,13 +187,13 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	var order []string
 	for _, e := range must[[]domain.LogEntry](t)(logOf(g, t2.ID)) {
 		switch e.Type {
-		case "change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed", "impact.committed":
+		case "change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.committed":
 			if len(order) == 0 || order[len(order)-1] != e.Type {
 				order = append(order, e.Type)
 			}
 		}
 	}
-	if i := slices.Index(order, "change.updated"); i < 0 || !slices.Equal(order[i:i+5], []string{"change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed"}) {
+	if i := slices.Index(order, "change.updated"); i < 0 || !slices.Equal(order[i:i+5], []string{"change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.committed"}) {
 		t.Fatalf("the rebase in the log: %v", order)
 	}
 	// the review of the merged draft was kept, the version committed

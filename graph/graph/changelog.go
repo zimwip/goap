@@ -36,13 +36,33 @@ func appendImpactEvent(ctx context.Context, tx Tx, ev domain.ImpactEvent) (domai
 	return ev, nil
 }
 
-// impactEvents is the impact log of a change (ADR 0029).
+// impactEvents is the impact log of a change (ADR 0029), with the verdicts the submission of each review decides
+// derived at its position (ADR 0105 addendum): what the view of the change folds.
 func impactEvents(ctx context.Context, tx Tx, change domain.ChangeID) ([]domain.ImpactEvent, error) {
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: change, Types: []string{domain.LogImpact + "."}})
+	entries, err := tx.Log(ctx, domain.LogFilter{Change: change, Types: []string{domain.LogImpact + ".", domain.LogFact + "." + string(domain.TypeReview)}})
 	if err != nil {
 		return nil, err
 	}
-	return decodeImpacts(ctx, tx, entries)
+	var out []domain.ImpactEvent
+	var reviews domain.ReviewFold
+	for _, l := range entries {
+		if !strings.HasPrefix(l.Type, domain.LogFact+".") {
+			events, err := decodeImpacts(ctx, tx, []domain.LogEntry{l})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, events...)
+			continue
+		}
+		items, err := itemsOf([]domain.LogEntry{l})
+		if err != nil {
+			return nil, err
+		}
+		if r, submitted := reviews.Apply(items[0]); submitted {
+			out = append(out, r.Verdicts(change, items[0], l.Seq)...)
+		}
+	}
+	return out, nil
 }
 
 // decodeImpacts reads impact events from their log entries (domain.ImpactEventsOf: one, or the ones an entry carries),
