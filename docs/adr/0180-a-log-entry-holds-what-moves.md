@@ -1,6 +1,6 @@
 # ADR 0180 — A log entry holds what moves: payloads the fold cannot derive, encoded in CBOR with a dictionary
 
-**Status**: accepted, §1 built · **Date**: 2026-11 · **Builds on**: ADR 0029 (impacts are event-sourced), ADR 0030 (one log per
+**Status**: accepted, §1 and §2 built · **Date**: 2026-11 · **Builds on**: ADR 0029 (impacts are event-sourced), ADR 0030 (one log per
 change), ADR 0105 addendum (a review is folded from its deltas), ADR 0128 (domains declare their item types), ADR 0142
 (a payload leaves its envelope), ADR 0144 (one entry per commit), ADR 0174 (the version is the record of an impact)
 
@@ -95,3 +95,33 @@ Lifecycle bench at 150K versions, PostgreSQL, the same machine one run after the
 | §1 | 516 v/s | 319 MB (−21 %) | 152 MB | 676 MB |
 
 By type of entry (payloads): `proposed` 35 → 24 MB, `updated` 39 → 23 MB, `fact.review` 20 → 9 MB, `created` 62 → 54 MB.
+
+## §2 as built
+
+- The repositories encode and decode at their boundary (`graph/graph/logcodec.go`): `Tx.AppendLog` / `AppendLogs` take
+  the entry's JSON and store its CBOR, `Tx.Log` gives the JSON back; the graph, its readers, `ListChangeLog`, PROV-O and
+  the web see JSON only, the memory repository keeps it as is.
+- The stored form starts with one byte: `0x01` CBOR, `0x02` a zstd frame (its four-byte magic left out), anything else
+  JSON (the entries written before: migration `0040_log_payload_cbor` turns the PostgreSQL column into `bytea`
+  holding their text; SQLite keeps its column, a blob stored as is). A payload is compressed only when that is shorter.
+- CBOR: deterministic (`CoreDetEncOptions`, the keys sorted), a UUID in its canonical lower-case form as tag 37 over
+  16 bytes (any other spelling stays text), an integer as an integer (a bignum beyond 64 bits), other numbers as
+  float64; nothing else of JSON needs a tag.
+- Dictionaries: a process trains one for an entry type once it wrote `logTrainAt` entries of it without one (1000),
+  a second after 50 000 more, none after; from the last 2000 entries of the type, 16 KiB, in the background
+  (`logCodec.train`), stored in `log_dictionary` with its id (a sequence on PostgreSQL), the frames written after it
+  naming that id. A reader meeting an id it does not know reads the dictionaries again (another process trained it).
+  Nothing is rewritten: an entry keeps the dictionary it was written with.
+- zstd at its fastest level, no checksum (the database keeps the rows).
+
+Lifecycle bench at 150K versions, PostgreSQL, one run after the other (§1 run again for the rate):
+
+| | Write rate | `change_log` (table + indexes) | Payloads | Database |
+|---|---|---|---|---|
+| main before §1 | 497 v/s | 403 MB | 200 MB | 761 MB |
+| §1 | 453 v/s | 319 MB | 152 MB | 676 MB |
+| §1 + §2 | 424 / 446 v/s | 197 MB (−51 % from main) | 38 MB | 553 MB |
+
+By type of entry (payloads, §1 → §2): `created` 54 → 13 MB, `committed` 25 → 6.3 MB, `updated` 23 → 6.1 MB,
+`proposed` 24 → 5.7 MB, `checkedOut` 16 → 3.8 MB, `fact.review` 9.3 → 3.3 MB. The write rate is within the noise of the
+machine (§1 measured 516 then 453 v/s); the codec costs a few microseconds an entry. Ten dictionaries, 46 KB in all.

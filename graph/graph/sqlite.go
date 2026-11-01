@@ -37,10 +37,14 @@ type SQLite struct {
 	// the order is global and the local mode has one process writing
 	mu     sync.Mutex
 	commit int64
+	// log encodes and decodes the payloads of the log (ADR 0180 §2)
+	log *logCodec
 }
 
 // NewSQLite returns a repository on db.
-func NewSQLite(db *sql.DB) *SQLite { return &SQLite{db: db} }
+func NewSQLite(db *sql.DB) *SQLite {
+	return &SQLite{db: db, log: newLogCodec(sqliteDicts{db: db})}
+}
 
 // WithReader gives the repository a pool of read-only connections on its file (platform.OpenSQLiteReader) for the
 // transactions of a read-only context.
@@ -867,15 +871,22 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 	return sqliteErr(err, "change")
 }
 
+// logDicts reads the dictionaries of the log in the transaction: the writer has one connection.
+func (t *sqliteTx) logDicts() logDictStore { return sqliteDicts{db: t.repo.db, q: t.tx} }
+
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	payload, err := t.repo.log.encode(ctx, t.logDicts(), e.Type, e.Payload)
+	if err != nil {
+		return e, err
+	}
 	if e.Seq != 0 {
 		// its position reserved (ReserveLogSeq)
 		_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload))
+			e.Seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), payload)
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload))
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), payload)
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
@@ -912,14 +923,19 @@ func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEnt
 	var out []domain.LogEntry
 	for rows.Next() {
 		var e domain.LogEntry
-		var change, at, payload string
+		var change, at string
+		var payload []byte
 		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.Causation, &at, &payload); err != nil {
 			return nil, err
 		}
-		e.Change, e.At, e.Payload = domain.ChangeID(change), tsParse(at), json.RawMessage(payload)
+		e.Change, e.At, e.Payload = domain.ChangeID(change), tsParse(at), json.RawMessage(payload) // as stored: decoded below
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return decodeStoredLog(ctx, t.repo.log, t.logDicts(), out)
 }
 
 func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {

@@ -42,6 +42,8 @@ type Postgres struct {
 	readAll bool
 	// roots are the roots of the trees of the changes last locked (LockChange)
 	roots *changeRoots
+	// log encodes and decodes the payloads of the log (ADR 0180 §2)
+	log *logCodec
 }
 
 // changeRoots keeps the root of the tree of each change last locked: a guess its lock checks once held (an attach or
@@ -78,7 +80,9 @@ func (c *changeRoots) keep(id domain.ChangeID, root string) {
 
 // NewPostgres returns a repository on pool (schema already migrated).
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
-	return &Postgres{pool: pool, roots: &changeRoots{roots: map[domain.ChangeID]string{}}}
+	p := &Postgres{pool: pool, roots: &changeRoots{roots: map[domain.ChangeID]string{}}}
+	p.log = newLogCodec(pgDicts{pool})
+	return p
 }
 
 // WithReader gives the repository a pool of read-only connections (platform.PostgresReader) for the transactions of
@@ -110,7 +114,7 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		}
 	}()
 	h := &heldQuerier{Tx: planned{pipe}, pipe: pipe}
-	if err := fn(&pgTx{tx: h, held: h, roots: p.roots, pipe: pipe}); err != nil {
+	if err := fn(&pgTx{tx: h, held: h, roots: p.roots, pipe: pipe, log: p.log}); err != nil {
 		return err
 	}
 	if err := h.flush(ctx); err != nil {
@@ -127,7 +131,7 @@ func (p *Postgres) readTx(ctx context.Context, fn func(tx Tx) error) error {
 		return err
 	}
 	defer conn.Release()
-	err = fn(&pgTx{tx: planned{conn}, readOnly: true})
+	err = fn(&pgTx{tx: planned{conn}, readOnly: true, log: p.log})
 	if err != nil && platform.IsPostgresReadOnly(err) {
 		return errWrites
 	}
@@ -182,6 +186,7 @@ type pgTx struct {
 	// pipe is the transaction of a write: what queues the statements nothing waits on (nil: a read)
 	pipe  *pipeTx
 	roots *changeRoots
+	log   *logCodec
 	// locked are the headers of the changes read with the root of their tree once its lock was held (LockChange): what
 	// the transaction then reads of them, until it writes them
 	locked map[domain.ChangeID]domain.Change
@@ -1402,9 +1407,9 @@ func scanArgs(dest, vals []any) error {
 }
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
-	payload := []byte(e.Payload)
-	if len(payload) == 0 {
-		payload = []byte("null") // an entry with no payload: the column holds JSON, never NULL
+	payload, err := t.log.encode(ctx, nil, e.Type, e.Payload)
+	if err != nil {
+		return e, err
 	}
 	seq := e.Seq // reserved (ReserveLogSeq)
 	if seq == 0 {
@@ -1428,7 +1433,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		t.pipe.queue(insert, args, "log entry "+e.Type)
 		return e, nil
 	}
-	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
+	err = q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
@@ -1467,14 +1472,16 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	t.dropNext() // the positions it takes come after any taken before
 	n := len(entries)
-	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	ids, changes, types, flows, procs, execs, subjects, bys, causes := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	payloads := make([][]byte, n)
 	ats := make([]time.Time, n)
 	for i, e := range entries {
 		ids[i], changes[i], types[i], flows[i], procs[i], execs[i], subjects[i], bys[i], causes[i], ats[i] = e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At
-		payloads[i] = string(e.Payload)
-		if len(e.Payload) == 0 {
-			payloads[i] = "null"
+		p, err := t.log.encode(ctx, nil, e.Type, e.Payload)
+		if err != nil {
+			return nil, err
 		}
+		payloads[i] = p
 	}
 	q := t.tx
 	if t.held != nil {
@@ -1482,8 +1489,8 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	// the rows are inserted, and take their positions, in the order of the array
 	rows, err := q.Query(ctx, `INSERT INTO change_log (`+strings.Join(changeLogColumns, ", ")+`)
-		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb
-		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[])
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::bytea[])
 			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, o)
 		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads)
 	if err != nil {
@@ -1543,10 +1550,14 @@ func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, 
 		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.Causation, &e.At, &payload); err != nil {
 			return nil, err
 		}
-		e.Change, e.Payload = domain.ChangeID(change), json.RawMessage(payload)
+		e.Change, e.Payload = domain.ChangeID(change), json.RawMessage(payload) // as stored: decoded below
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return decodeStoredLog(ctx, t.log, nil, out)
 }
 
 func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {

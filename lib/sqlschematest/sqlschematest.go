@@ -1,6 +1,6 @@
 // Package sqlschematest checks that the PostgreSQL and the SQLite migrations of a service describe the same schema
 // (ADR 0074). Both dialects are kept by hand; this guard reads the migrations of each (CREATE TABLE, CREATE INDEX,
-// ALTER TABLE ... ADD FOREIGN KEY / RENAME / RENAME COLUMN, ALTER INDEX ... RENAME, DROP TABLE, in file order), reduces them to a schema in a common
+// ALTER TABLE ... ADD FOREIGN KEY / RENAME / RENAME COLUMN / ALTER COLUMN ... TYPE, ALTER INDEX ... RENAME, DROP TABLE, in file order), reduces them to a schema in a common
 // vocabulary and reports every difference in tables, columns, nullability, defaults, keys, constraints and indexes.
 // It is test-only: no package outside _test files imports it.
 //
@@ -122,6 +122,7 @@ var (
 	reAddFK       = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (FOREIGN KEY .*)$`)
 	reAddColumn   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (?:COLUMN )?(\w+ .*)$`)
 	reDropColumn  = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) DROP (?:COLUMN )?(\w+)$`)
+	reAlterType   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ALTER (?:COLUMN )?(\w+) (?:SET DATA )?TYPE (\w+)(?: USING .*)?$`)
 	reStorage     = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) (?:RE)?SET \(.*\)$`)
 )
 
@@ -249,6 +250,19 @@ func (s *Schema) apply(stmt string) error {
 		for i, c := range t.Columns {
 			if c.Name == m[2] {
 				t.Columns = append(t.Columns[:i], t.Columns[i+1:]...)
+				return nil
+			}
+		}
+		return fmt.Errorf("unknown column %s.%s", m[1], m[2])
+	}
+	if m := reAlterType.FindStringSubmatch(stmt); m != nil {
+		t := s.Tables[m[1]]
+		if t == nil {
+			return fmt.Errorf("ALTER of an unknown table %s", m[1])
+		}
+		for i := range t.Columns {
+			if t.Columns[i].Name == m[2] {
+				t.Columns[i].Raw, t.Columns[i].Type = m[3], baseType(m[3])
 				return nil
 			}
 		}
