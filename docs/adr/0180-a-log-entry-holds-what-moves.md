@@ -1,6 +1,6 @@
 # ADR 0180 — A log entry holds what moves: payloads the fold cannot derive, encoded in CBOR with a dictionary
 
-**Status**: proposed · **Date**: 2026-11 · **Builds on**: ADR 0029 (impacts are event-sourced), ADR 0030 (one log per
+**Status**: accepted, §1 built · **Date**: 2026-11 · **Builds on**: ADR 0029 (impacts are event-sourced), ADR 0030 (one log per
 change), ADR 0105 addendum (a review is folded from its deltas), ADR 0128 (domains declare their item types), ADR 0142
 (a payload leaves its envelope), ADR 0144 (one entry per commit), ADR 0174 (the version is the record of an impact)
 
@@ -69,3 +69,29 @@ to 16 µs for JSON; a write is counted in milliseconds.
   The PROV-O export (ADR 0057) and `ListChangeLog` keep serving JSON.
 - §1 can be built without §2, and is first: it is independent of the format.
 - The floor of a review is 16 bytes per impact: a review of 1000 impacts is about 17 KB.
+
+## §1 as built
+
+- `change_log.node` and `change_log_node` are gone (migration `0039_log_names_no_node`); `Tx.NodeChangePage` reads the
+  versions of the node (`node_version_pkey`: `change_id`, `min(log_seq)`), `Graph.NodeChanges` adds the open changes from
+  their views (`draftState.firstOn`: the first event of an impact naming the node).
+- A declaration (`proposed`, `created`) leaves out `createdAt` when it is the entry's time (the graph stamps the entry
+  with it), `producedBy` when it is the entry's author, `review: proposed`, and `intent: created` on a creation
+  (`statePayload`; `ImpactEventOf` and the web's `decodeLogEntry` put them back). Times are kept to the microsecond
+  (`Graph.now`), the precision of the PostgreSQL column.
+- A fact leaves its id, type, time and execution to the columns, and its flow, target and author when the columns hold
+  them as is (`domain.FactEntry` / `domain.ItemOf`; the web's `decodeLogEntry`); every reader of a fact goes through them.
+- A review delta writes what most of its entries set alike as `defaults` (`outcome`, `comment`, `by`), an entry what
+  differs (`null` for a field it leaves unset), an entry with its impact alone as the impact's id (`ReviewDelta.Data`,
+  `ReviewDeltaOf`, the web's `ReviewFold`).
+- An edit (`updated`) leaves out its post, the draft reference of its impact's node: the fold of the view puts it back
+  (`draftState.apply`).
+
+Lifecycle bench at 150K versions, PostgreSQL, the same machine one run after the other:
+
+| | Write rate | `change_log` (table + indexes) | Payloads | Database |
+|---|---|---|---|---|
+| main (reference) | 497 v/s | 403 MB | 200 MB | 761 MB |
+| §1 | 516 v/s | 319 MB (−21 %) | 152 MB | 676 MB |
+
+By type of entry (payloads): `proposed` 35 → 24 MB, `updated` 39 → 23 MB, `fact.review` 20 → 9 MB, `created` 62 → 54 MB.

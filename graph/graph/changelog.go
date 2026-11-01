@@ -124,7 +124,18 @@ func decodeImpacts(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]dom
 
 // itemsOf decodes the facts of a log.
 func itemsOf(entries []domain.LogEntry) ([]domain.ChangeItem, error) {
-	return decodeLog[domain.ChangeItem](entries, nil)
+	out := make([]domain.ChangeItem, 0, len(entries))
+	for _, l := range entries {
+		it, err := domain.ItemOf(l)
+		if err != nil {
+			return nil, fmt.Errorf("log entry %d (%s): %w", l.Seq, l.Type, err)
+		}
+		out = append(out, it)
+	}
+	if len(out) == 0 {
+		return nil, nil // nil when empty, as the stores returned before
+	}
+	return out, nil
 }
 
 func decodeLog[T any](entries []domain.LogEntry, set func(*T, domain.LogEntry)) ([]T, error) {

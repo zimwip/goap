@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -90,12 +91,18 @@ type impactPayload struct {
 }
 
 // statePayload is the change impact a proposed or created event adds, its id being the event's impact. On a created
-// event its key and type are the draft's: left out when they are (nil), written otherwise, "" included.
+// event its key and type are the draft's: left out when they are (nil), written otherwise, "" included. What the entry
+// says is left out too (ADR 0180): its time when the impact was declared then, its author when it produced it, the
+// review a declaration starts with (proposed), the intent of a creation (created).
 type statePayload struct {
 	ChangeImpact
-	ID   absent  `json:"id,omitempty"`
-	Key  *string `json:"key,omitempty"`
-	Type *string `json:"type,omitempty"`
+	ID         absent      `json:"id,omitempty"`
+	Key        *string     `json:"key,omitempty"`
+	Type       *string     `json:"type,omitempty"`
+	CreatedAt  *time.Time  `json:"createdAt,omitempty"`
+	ProducedBy *string     `json:"producedBy,omitempty"`
+	Review     *NodeReview `json:"review,omitempty"`
+	Intent     *NodeIntent `json:"intent,omitempty"`
 }
 
 // draftPayload is a draft in a payload: its change, impact and flow are the event's (applyDraft sets them).
@@ -136,6 +143,8 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 	p := impactPayload{ImpactEvent: e}
 	// the post of an event installing a draft is the draft reference of its node: left out
 	switch n := e.draftNode(); {
+	case e.Op == ImpactUpdated && e.Post != nil && e.Post.IsDraft():
+		// an edit is of the draft of the impact's node (ADR 0180): the fold of the view puts it back
 	case e.Post == nil && n != "":
 		p.PostRaw = nullPost
 	case e.Post != nil && (n == "" || *e.Post != DraftRef(n)):
@@ -158,6 +167,19 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 				if typ == e.Draft.Type {
 					sp.Type = nil
 				}
+			}
+			if !e.State.CreatedAt.Equal(e.At) {
+				at := e.State.CreatedAt
+				sp.CreatedAt = &at
+			}
+			if by := e.State.ProducedBy; by != e.By {
+				sp.ProducedBy = &by
+			}
+			if r := e.State.Review; r != ReviewProposed {
+				sp.Review = &r
+			}
+			if i := e.State.Intent; e.Op != ImpactCreated || i != IntentCreated {
+				sp.Intent = &i
 			}
 			p.State = sp
 		} else {
@@ -184,8 +206,12 @@ type impactPayloadIn struct {
 
 type stateIn struct {
 	ChangeImpact
-	Key  *string `json:"key"`
-	Type *string `json:"type"`
+	Key        *string     `json:"key"`
+	Type       *string     `json:"type"`
+	CreatedAt  *time.Time  `json:"createdAt"`
+	ProducedBy *string     `json:"producedBy"`
+	Review     *NodeReview `json:"review"`
+	Intent     *NodeIntent `json:"intent"`
 }
 
 // One log entry may carry several events of one operation (ADR 0144): the verdicts of a review, the versions of a
@@ -409,6 +435,19 @@ func ImpactEventOf(l LogEntry) (ImpactEvent, error) {
 		} else if e.Draft != nil {
 			st.Type = e.Draft.Type
 		}
+		st.CreatedAt, st.ProducedBy, st.Review, st.Intent = l.At, l.By, ReviewProposed, IntentCreated
+		if s.CreatedAt != nil {
+			st.CreatedAt = *s.CreatedAt
+		}
+		if s.ProducedBy != nil {
+			st.ProducedBy = *s.ProducedBy
+		}
+		if s.Review != nil {
+			st.Review = *s.Review
+		}
+		if s.Intent != nil {
+			st.Intent = *s.Intent
+		}
 		e.State = &st
 	}
 	switch {
@@ -518,7 +557,7 @@ func CommitEntry(id string, events []ImpactEvent) (LogEntry, error) {
 	l := LogEntry{ID: id, Change: first.Change, Type: LogImpact + "." + string(ImpactCommitted), Flow: first.Flow, Execution: first.Execution,
 		By: first.By, At: first.At, Causation: first.Causation, Payload: raw}
 	if len(events) == 1 {
-		l.Subject, l.Node = string(first.Impact), first.Committed.ID
+		l.Subject = string(first.Impact)
 	}
 	return l, err
 }

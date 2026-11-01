@@ -72,6 +72,9 @@ func (g *Graph) withEntries(ctx context.Context, tx Tx, id domain.ChangeID, fn f
 
 // envelope sets what an event leaves to its caller: its time and its author.
 func (g *Graph) envelope(ctx context.Context, e *domain.ImpactEvent) {
+	if e.At.IsZero() && e.State != nil && e.State.ID == e.Impact && !e.State.CreatedAt.IsZero() {
+		e.At = e.State.CreatedAt // a declaration is when the impact was declared: the payload leaves it to the entry (ADR 0180)
+	}
 	if e.At.IsZero() {
 		e.At = g.now()
 	}

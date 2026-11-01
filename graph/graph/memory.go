@@ -924,27 +924,29 @@ func (t *memTx) ChangeVersionRecords(_ context.Context, change domain.ChangeID, 
 	return out, nil
 }
 
-// NodeChangePage implements Tx: the changes whose log names the node, the cursor of each the position of its first
-// such entry.
+// NodeChangePage implements Tx: the changes that wrote versions of the node, the cursor of each the first entry of
+// its log committing one.
 func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error) {
 	first := map[domain.ChangeID]int64{}
-	var all []NodeChange
-	for _, e := range t.st.log {
-		if e.Node != node {
+	for _, n := range t.st.versions[node] {
+		if n.LogSeq <= 0 {
 			continue
 		}
-		if _, ok := first[e.Change]; !ok {
-			first[e.Change] = e.Seq
-			all = append(all, NodeChange{Change: e.Change, Seq: e.Seq})
+		if s, ok := first[n.ChangeID]; !ok || n.LogSeq < s {
+			first[n.ChangeID] = n.LogSeq
 		}
 	}
-	var out []NodeChange
-	for i := len(all) - 1; i >= 0 && len(out) < limit; i-- {
-		if before == 0 || all[i].Seq < before {
-			out = append(out, all[i])
+	var all []NodeChange
+	for c, s := range first {
+		if before == 0 || s < before {
+			all = append(all, NodeChange{Change: c, Seq: s})
 		}
 	}
-	return out, nil
+	slices.SortFunc(all, func(a, b NodeChange) int { return cmp.Compare(b.Seq, a.Seq) })
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	return all, nil
 }
 
 func (t *memTx) ReserveLogSeq(_ context.Context, _ domain.ChangeID) (int64, error) {

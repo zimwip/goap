@@ -10,6 +10,7 @@ import type {
  * payload leaves its envelope to the columns of the entry (ADR 0142): it is put back. */
 export function decodeLogEntry<T>(l: LogEntry): T {
   const payload = JSON.parse(l.payload ?? "{}");
+  if (l.type?.startsWith("fact.")) return decodeFact<T>(l, payload);
   if (!l.type?.startsWith("impact.")) return payload as T;
   const envelope = {
     id: l.id,
@@ -21,10 +22,17 @@ export function decodeLogEntry<T>(l: LogEntry): T {
     by: l.by,
     at: l.at,
   };
-  let state =
-    payload.state && !payload.state.id
-      ? { ...payload.state, id: l.subject }
-      : payload.state;
+  // a declaration leaves to the entry its time, its author, the review it starts with and a creation's intent (ADR 0180)
+  let state = payload.state
+    ? {
+        createdAt: l.at,
+        producedBy: l.by ?? "",
+        review: "proposed",
+        ...(payload.op === "created" ? { intent: "created" } : {}),
+        ...payload.state,
+        ...(payload.state.id ? {} : { id: l.subject }),
+      }
+    : payload.state;
   const draft = payload.draft as
     | { node?: string; key?: string; type?: string; base?: { id?: string } }
     | undefined;
@@ -53,6 +61,21 @@ export function decodeLogEntry<T>(l: LogEntry): T {
     ...payload,
     ...post,
     ...(state ? { state } : {}),
+  } as T;
+}
+
+/** A fact as its entry stores it (contracts/domain FactEntry, ADR 0180): its id, type, time and execution in the
+ * columns, its author, flow and target too unless the payload writes them. */
+function decodeFact<T>(l: LogEntry, payload: Record<string, unknown>): T {
+  return {
+    id: l.id,
+    type: l.type?.slice("fact.".length),
+    createdAt: l.at,
+    ...(l.execution ? { execution: l.execution } : {}),
+    ...(l.flow ? { flow: l.flow } : {}),
+    ...(l.subject ? { target: l.subject } : {}),
+    ...(l.by ? { producedBy: l.by } : {}),
+    ...payload,
   } as T;
 }
 

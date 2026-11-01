@@ -59,7 +59,7 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 			}
 		case domain.LogFact:
 			var it domain.ChangeItem
-			if err = json.Unmarshal(e.Payload, &it); err == nil {
+			if it, err = domain.ItemOf(e); err == nil {
 				b.fact(c, e, it)
 			}
 		case journal.StreamModel:

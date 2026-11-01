@@ -809,13 +809,13 @@ func (d dialect) sqlOpenChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE status NOT IN ('applied', 'abandoned')` + d.orderBy("created_at", "")
 }
 
-// sqlNodeChangePage reads the last limit changes whose log names a node in an impact entry, each with the position of
-// its first one, whose position is below before (0: any), newest first: from the index change_log_node (node, seq,
-// change_id) alone (ADR 0174).
+// sqlNodeChangePage reads the last limit changes that wrote versions of a node, each with the position of the first
+// entry of its log committing one, whose position is below before (0: any), newest first: from the versions of the node
+// (index node_version_pkey; ADR 0180: an impact names its node, a version its change and the entry committing it).
 func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) (string, []any) {
-	q, args := `SELECT `+d.id("change_id")+`, min(seq) FROM change_log WHERE node = `+d.ph(1)+` GROUP BY change_id`, []any{string(node)}
+	q, args := `SELECT `+d.id("change_id")+`, min(log_seq) FROM node_version WHERE node_id = `+d.ph(1)+` AND log_seq > 0 GROUP BY change_id`, []any{string(node)}
 	if before > 0 {
-		q, args = q+` HAVING min(seq) < `+d.ph(2), append(args, before)
+		q, args = q+` HAVING min(log_seq) < `+d.ph(2), append(args, before)
 	}
 	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
 }
@@ -968,7 +968,7 @@ var (
 	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner", "origins", "committed", "editor", "visibility", "log_seq", "links", "links_base", "links_depth", "links_seq"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id", "removes", "to_url"}
 	commitColumns      = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "kind", "rebased_from", "seq", "fork_commit"}
-	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload", "node"}
+	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
 )
 
 // nodeArgs are the arguments of a node row, in the order of nodeColumns: what its first version gives it.
