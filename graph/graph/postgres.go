@@ -92,6 +92,12 @@ func (p *Postgres) WithReader(read *pgxpool.Pool) *Postgres {
 	return p
 }
 
+// CompressLog says whether the payloads of the log are compressed (default) or kept as CBOR (ADR 0180 §2): the entries
+// written either way read the same.
+func (p *Postgres) CompressLog(on bool) {
+	p.log.plain = !on
+}
+
 // InTx implements Repo.
 func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if p.read != nil && (p.readAll || platform.IsReadOnly(ctx)) {

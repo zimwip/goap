@@ -104,9 +104,14 @@ By type of entry (payloads): `proposed` 35 → 24 MB, `updated` 39 → 23 MB, `f
 - The stored form starts with one byte: `0x01` CBOR, `0x02` a zstd frame (its four-byte magic left out), anything else
   JSON (the entries written before: migration `0040_log_payload_cbor` turns the PostgreSQL column into `bytea`
   holding their text; SQLite keeps its column, a blob stored as is). A payload is compressed only when that is shorter.
-- CBOR: deterministic (`CoreDetEncOptions`, the keys sorted), a UUID in its canonical lower-case form as tag 37 over
-  16 bytes (any other spelling stays text), an integer as an integer (a bignum beyond 64 bits), other numbers as
-  float64; nothing else of JSON needs a tag.
+- CBOR, transcoded in one pass each way with no tree in between (`graph/graph/logcbor.go`): the order of the JSON kept
+  (Go's encoder writes a value the same way every time), containers with their lengths, a UUID in its canonical
+  lower-case form as tag 37 over 16 bytes (any other spelling stays text), an integer as an integer (a bignum beyond 64
+  bits), other numbers as float64; back, the JSON Go's encoder writes, byte for byte. 0.8 µs to encode an entry, 0.55 µs
+  to decode it (6.8 and 9.3 µs through a generic CBOR library and a tree, the first version). The entries that version
+  wrote (keys sorted, floats shortened) read the same.
+- `GOAP_LOG_COMPRESS=0` keeps the payloads as CBOR, uncompressed and with no dictionary trained
+  (`Postgres.CompressLog` / `SQLite.CompressLog`); the compressed entries still read.
 - Dictionaries: a process trains one for an entry type once it wrote `logTrainAt` entries of it without one (1000),
   a second after 50 000 more, none after; from the last 2000 entries of the type, 16 KiB, in the background
   (`logCodec.train`), stored in `log_dictionary` with its id (a sequence on PostgreSQL), the frames written after it
@@ -121,6 +126,17 @@ Lifecycle bench at 150K versions, PostgreSQL, one run after the other (§1 run a
 | main before §1 | 497 v/s | 403 MB | 200 MB | 761 MB |
 | §1 | 453 v/s | 319 MB | 152 MB | 676 MB |
 | §1 + §2 | 424 / 446 v/s | 197 MB (−51 % from main) | 38 MB | 553 MB |
+
+Then, with the transcoder in one pass, one run after the other, the CPU of the graph profiled over 40 s:
+
+| | Write rate | `change_log` | Database | Codec (CPU of the graph) |
+|---|---|---|---|---|
+| §1 | 422 v/s | 319 MB | 676 MB | — |
+| §2, zstd | 446 v/s | 196 MB | 553 MB | 3.8 % (zstd 3.3 %, CBOR 0.3 %) |
+| §2, `GOAP_LOG_COMPRESS=0` | 436 v/s | 246 MB | 604 MB | 0.35 % |
+
+The rates are within the noise of the machine (4 cores shared by PostgreSQL, the graph and the bench); what zstd costs
+is mostly the reset of its dictionary's tables at each entry.
 
 By type of entry (payloads, §1 → §2): `created` 54 → 13 MB, `committed` 25 → 6.3 MB, `updated` 23 → 6.1 MB,
 `proposed` 24 → 5.7 MB, `checkedOut` 16 → 3.8 MB, `fact.review` 9.3 → 3.3 MB. The write rate is within the noise of the
