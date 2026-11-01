@@ -22,9 +22,20 @@ const DefaultPostgresConns = 8
 // OpenPostgres connects to PostgreSQL. The DSN should set search_path to the
 // service schema (dev: one database, one schema per service).
 func OpenPostgres(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
+	return OpenPostgresWith(ctx, dsn, nil)
+}
+
+// OpenPostgresWith is OpenPostgres with session settings of the service's own (runtime parameters sent when each
+// connection starts); a setting the DSN names stays as the DSN sets it.
+func OpenPostgresWith(ctx context.Context, dsn string, settings map[string]string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
+	}
+	for k, v := range settings {
+		if _, set := cfg.ConnConfig.RuntimeParams[k]; !set && !strings.Contains(dsn, k) {
+			cfg.ConnConfig.RuntimeParams[k] = v
+		}
 	}
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	if !strings.Contains(dsn, "pool_max_conns") {

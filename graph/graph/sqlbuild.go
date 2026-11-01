@@ -228,7 +228,7 @@ func (d dialect) sqlNodesAt(refs []domain.NodeRef, nodeType string) (string, []a
 		for i, r := range refs {
 			ids[i], vs[i] = string(r.ID), int32(r.Version)
 		}
-		return `SELECT ` + d.nodeCols() + nodeFrom + ` JOIN unnest($1::uuid[], $2::int[]) AS r(id, version) ON r.id = v.node_id AND r.version = v.version
+		return d.eachProbe() + `SELECT ` + d.nodeCols() + d.keyedVersions(1) + ` CROSS JOIN LATERAL (SELECT * FROM node n WHERE n.id = v.node_id` + d.fence() + `) n
 		      WHERE ($3 = '' OR n.type = $3) ORDER BY n.key`, []any{ids, vs, nodeType}
 	}
 	pairs := make([][2]any, len(refs))
@@ -497,7 +497,17 @@ func (d dialect) textList(col string, n int, list []string) (string, any) {
 
 // heldLinksWhere is heldLinks with more conditions on the rows of the sets (and, of the links of the chain).
 func (d dialect) heldLinksWhere(n int, and string) string {
-	return d.heldLinksOver("", d.refsRows(n), and)
+	return d.heldLinksOver("", d.probeRefs(n), and)
+}
+
+// probeRefs is refsRows read through a sub-select on PostgreSQL (probeList): no plan knows how many versions it holds,
+// so the generic plan of a statement marked eachProbe costs what a plan with the values costs, and the prepared
+// statement keeps it (each version is read by the key of node_version, its sets by link_from, whatever their number).
+func (d dialect) probeRefs(n int) string {
+	if d.pg {
+		return `SELECT * FROM unnest((SELECT ` + d.ph(n) + `::uuid[]), (SELECT ` + d.ph(n+1) + `::int[]))`
+	}
+	return d.refsRows(n)
 }
 
 // heldLinksOver is heldLinksWhere over the versions the query rows selects (id, version), after the common table
@@ -510,6 +520,9 @@ func (d dialect) heldLinksOver(pre, rows, and string) string {
 
 // heldLinksParts is heldLinksOver as its common table expressions (h the rows of the sets) and its final select.
 func (d dialect) heldLinksParts(pre, rows, and string) (string, string) {
+	if d.pg {
+		return d.heldLinksKeyed(pre, rows, and)
+	}
 	r, base := `r(id, version) AS (`, `node_version v JOIN r`
 	if pre != "" { // versions a query selects: kept computed and read first (SQLite would scan the versions)
 		r, base = `r(id, version) AS MATERIALIZED (`, `r`+d.outerJoin()+`node_version v`
@@ -521,6 +534,26 @@ func (d dialect) heldLinksParts(pre, rows, and string) (string, string) {
 			SELECT c.nid, c.rv, s.links_base FROM c JOIN node_version s ON s.node_id = c.nid AND s.version = c.sv WHERE s.links_depth > 0
 		),
 		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c` + d.outerJoin() + `link l ON l.from_id = c.nid AND l.from_version = c.sv` + and + `)`,
+		`SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
+		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
+}
+
+// heldLinksKeyed is heldLinksParts on PostgreSQL: each version, each set of its chain and the rows of each set read by
+// their key, a LATERAL sub-select fenced by OFFSET 0 (fence), so that no plan joins the tables whole. A generic plan
+// made while they were empty (a prepared statement of eachProbe, PostgresSettings) reads them so too: a plan joining
+// them would have kept scanning them once they hold millions of rows.
+func (d dialect) heldLinksKeyed(pre, rows, and string) (string, string) {
+	r := `r(id, version) AS (`
+	if pre != "" {
+		r = `r(id, version) AS MATERIALIZED (`
+	}
+	return `WITH RECURSIVE ` + pre + r + rows + `),
+		c(nid, rv, sv) AS (
+			SELECT v.node_id, v.version, coalesce(v.links, v.version) FROM r CROSS JOIN LATERAL (SELECT v.node_id, v.version, v.links FROM node_version v WHERE v.node_id = r.id AND v.version = r.version` + d.fence() + `) v
+			UNION ALL
+			SELECT c.nid, c.rv, s.links_base FROM c CROSS JOIN LATERAL (SELECT s.links_base FROM node_version s WHERE s.node_id = c.nid AND s.version = c.sv AND s.links_depth > 0` + d.fence() + `) s
+		),
+		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM c CROSS JOIN LATERAL (SELECT l.id, l.type, l.from_id, l.to_id, l.to_version, l.props, l.change_id, l.removes, l.to_url FROM link l WHERE l.from_id = c.nid AND l.from_version = c.sv` + and + d.fence() + `) l)`,
 		`SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id, h.to_url FROM h
 		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
@@ -610,8 +643,11 @@ func (d dialect) sqlLinkSetOf(ref domain.NodeRef) (string, []any) {
 // sqlLinkSetsOf reads how the versions of refsArgs hold their links: node, version, then the columns of sqlLinkSetOf.
 func (d dialect) sqlLinkSetsOf(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
-	return `SELECT ` + d.id("v.node_id") + `, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq FROM node_version v` +
-		d.refsJoin("r", "v.node_id", "v.version", 1), args
+	cols := `SELECT ` + d.id("v.node_id") + `, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth, v.links_seq`
+	if d.pg {
+		return d.eachProbe() + cols + d.keyedVersions(1), args
+	}
+	return cols + ` FROM node_version v` + d.refsJoin("r", "v.node_id", "v.version", 1), args
 }
 
 // linkCols is the select list of a link.
@@ -1006,6 +1042,13 @@ func (d dialect) refsJoin(a, idCol, verCol string, n int) string {
 	return ` JOIN json_each(` + d.ph(n) + `) ` + a + ` ON json_extract(` + a + `.value, '$[0]') = ` + idCol + ` AND json_extract(` + a + `.value, '$[1]') = ` + verCol
 }
 
+// keyedVersions is the versions of refsArgs at placeholder n as the rows v of node_version, PostgreSQL: the refs read
+// through a sub-select (probeRefs), each version by its key, fenced (heldLinksKeyed), so that any plan, the generic plan
+// of a statement marked eachProbe included, reads them so.
+func (d dialect) keyedVersions(n int) string {
+	return ` FROM unnest((SELECT ` + d.ph(n) + `::uuid[]), (SELECT ` + d.ph(n+1) + `::int[])) AS r(id, version) CROSS JOIN LATERAL (SELECT * FROM node_version v WHERE v.node_id = r.id AND v.version = r.version` + d.fence() + `) v`
+}
+
 // refsArgs are the arguments of refsJoin, and the number of the next placeholder after them.
 func (d dialect) refsArgs(refs []domain.NodeRef) ([]any, int) {
 	if d.pg {
@@ -1106,14 +1149,14 @@ func (d dialect) qualifiedLinkCols() string {
 // sqlLinksFrom reads the links leaving the versions refs, by id.
 func (d dialect) sqlLinksFrom(refs []domain.NodeRef) (string, []any) {
 	args, _ := d.refsArgs(refs)
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinks(1) + `) l ORDER BY l.id`, args
+	return d.eachProbe() + `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinks(1) + `) l ORDER BY l.id`, args
 }
 
 // sqlLinksFromOfType is sqlLinksFrom keeping the links of some types.
 func (d dialect) sqlLinksFromOfType(refs []domain.NodeRef, types []string) (string, []any) {
 	args, n := d.refsArgs(refs)
 	_, arg := d.textList("", n, types)
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
+	return d.eachProbe() + `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOfType(1, n) + `) l ORDER BY l.id`, append(args, arg)
 }
 
 // sqlLinkSources reads the nodes a link row of some types (nil: every type) names one of the nodes ids as its target
@@ -1150,7 +1193,7 @@ func (d dialect) sqlLinksFromInto(refs []domain.NodeRef, to []domain.NodeID, typ
 		tin, targ := d.textList("l.type", n+1, types)
 		and, args = and+` AND `+tin, append(args, targ)
 	}
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, and) + `) l ORDER BY l.id`, args
+	return d.eachProbe() + `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksWhere(1, and) + `) l ORDER BY l.id`, args
 }
 
 // selectLevel is a level of the selection of a state (ADR 0143): the commits a branch holds up to an order.
@@ -1167,7 +1210,7 @@ type selectLevel struct {
 // (heldLinks).
 func (d dialect) sqlLinksEnteringAt(namespace string, levels []selectLevel, ids []domain.NodeID, types []string, skip []domain.NodeID) (string, []any) {
 	pre, rows, and, args := d.entering(namespace, levels, ids, types, skip, nil)
-	return `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOver(pre, rows, and) + `) l ORDER BY l.id`, args
+	return d.eachProbe() + `SELECT ` + d.qualifiedLinkCols() + ` FROM (` + d.heldLinksOver(pre, rows, and) + `) l ORDER BY l.id`, args
 }
 
 // sourcePage is a page of the sources of the links entering a node: the sources after a source ("": from the first),
@@ -1195,14 +1238,18 @@ func (d dialect) entering(namespace string, levels []selectLevel, ids []domain.N
 	args := []any{domain.NamespaceOf(namespace), nil, int64(0)}
 	var from, where, and string
 	if d.pg {
-		in, arg := d.idList("to_id", 2, ids)
-		lin, _ := d.idList("l.to_id", 2, ids)
-		from, where, and, args[1] = `link`, in, ` AND `+lin, arg
+		// the targets read through a sub-select (probeList): the plan knows not their number, the prepared statement
+		// keeps its generic plan (sqlLinksEnteringAt is marked eachProbe)
+		// each target's link rows read by its key (link_to_type), fenced (heldLinksKeyed)
+		_, arg := d.idList("to_id", 2, ids)
+		inner := `to_id = q.id`
+		and = ` AND l.to_id = ANY((SELECT ` + d.ph(2) + `::uuid[])::uuid[])`
 		if types != nil {
 			tin, targ := d.textList("type", 4, types)
 			ltin, _ := d.textList("l.type", 4, types)
-			where, and, args = where+` AND `+tin, and+` AND `+ltin, append(args, targ)
+			inner, and, args = inner+` AND `+tin, and+` AND `+ltin, append(args, targ)
 		}
+		from, where, args[1] = `unnest((SELECT `+d.ph(2)+`::uuid[])) q(id) CROSS JOIN LATERAL (SELECT from_id, removes FROM link WHERE `+inner+` AND removes IS NULL`+d.fence()+`) k`, `true`, arg
 	} else {
 		// SQLite plans a list read from json_each as a scan of the links: one value is sought (link_to_type, in the
 		// order of the sources), a list is joined first, each of its values sought

@@ -13,12 +13,17 @@ import (
 // OptionalPostgres opens and migrates GOAP_DB_DSN when set. It returns nil
 // when no DSN is configured (the service then uses in-memory storage).
 func OptionalPostgres(ctx context.Context, log *slog.Logger, migrations fs.FS) *pgxpool.Pool {
+	return OptionalPostgresWith(ctx, log, migrations, nil)
+}
+
+// OptionalPostgresWith is OptionalPostgres with session settings of the service's own (OpenPostgresWith).
+func OptionalPostgresWith(ctx context.Context, log *slog.Logger, migrations fs.FS, settings map[string]string) *pgxpool.Pool {
 	dsn := Env("GOAP_DB_DSN", "")
 	if dsn == "" {
 		log.Warn("GOAP_DB_DSN not set: using in-memory storage")
 		return nil
 	}
-	pool, err := OpenPostgres(ctx, dsn)
+	pool, err := OpenPostgresWith(ctx, dsn, settings)
 	if err != nil {
 		Fatal(log, "postgres", err)
 	}
