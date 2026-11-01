@@ -1302,10 +1302,6 @@ func (h *Handler) ImpactNodeReviewBatch(ctx context.Context, r *connect.Request[
 		}
 		b.Verdicts = append(b.Verdicts, domain.ImpactVerdict{Impact: domain.ChangeImpactID(v.ChangeImpactId), Status: status, Comment: v.Comment})
 	}
-	if m.Item != nil {
-		it := pbconv.ItemFromPB(m.Item)
-		b.Item = &it
-	}
 	out, err := h.Graph.ImpactNodeReviewBatch(ctx, domain.ChangeID(m.ChangeId), b)
 	resp := &graphv1.ImpactNodeReviewBatchResponse{}
 	for _, cn := range out {

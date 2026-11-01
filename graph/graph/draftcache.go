@@ -78,6 +78,11 @@ type draftState struct {
 	frozen bool
 	// sharedMoves: moveSeq is shared with the fold it was copied from, cloned at its first write
 	sharedMoves bool
+	// reviews are the reviews of the change, folded from their deltas (ADR 0105 addendum): the item submitting one
+	// derives its verdicts, folded as the reviewed events they are; sharedReviews: shared with the fold it was copied
+	// from, cloned at its first write
+	reviews       *domain.ReviewFold
+	sharedReviews bool
 	// bytes estimates the memory the view holds (eventSize, itemSize): what the cache counts against its bound
 	bytes int64
 	// top is, plus one, a last position of the whole log of the change at which the fold was known to hold every impact
@@ -93,7 +98,7 @@ func (s *draftState) copy() *draftState {
 	return &draftState{change: s.change, seq: s.seq, impacts: s.impacts.share(), at: s.at.share(), byNode: s.byNode.share(), byKey: s.byKey.share(),
 		odd: s.odd, drafts: s.drafts.share(), nodes: s.nodes.share(),
 		conflicts: s.conflicts.share(), items: slices.Clip(s.items), events: s.events, log: s.log, phases: s.phases.share(), moved: s.moved,
-		first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, sharedMoves: true}
+		first: s.first, state: s.state, moveSeq: s.moveSeq, bytes: s.bytes, sharedMoves: true, reviews: s.reviews, sharedReviews: true}
 }
 
 // eventLog is the array of impact events the folds copied from one another share: the elements a fold holds are never
@@ -147,6 +152,10 @@ func (s *draftState) draft(id domain.ChangeImpactID, flow string) (domain.Draft,
 func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 	s.items = append(s.items, it)
 	s.bytes += itemSize(it)
+	if it.Type == domain.TypeReview {
+		s.review(it, seq)
+		return
+	}
 	if it.Type != domain.TypeTransition || it.Flow != "" {
 		return
 	}
@@ -163,6 +172,22 @@ func (s *draftState) fact(it domain.ChangeItem, seq int64) {
 	}
 	s.moveSeq[it.ID] = seq
 	s.seq = seq
+}
+
+// review folds a delta of a review: the one submitting it decides its verdicts, folded at its position (never stored,
+// ADR 0105 addendum).
+func (s *draftState) review(it domain.ChangeItem, seq int64) {
+	if s.sharedReviews || s.reviews == nil {
+		s.reviews, s.sharedReviews = s.reviews.Clone(), false
+	}
+	r, submitted := s.reviews.Apply(it)
+	s.seq = seq
+	if !submitted {
+		return
+	}
+	for _, e := range r.Verdicts(s.change, it, seq) {
+		s.apply(e)
+	}
 }
 
 // phaseOf is the state a change impact started its draft in; false when the change never moved or the impact started

@@ -1,20 +1,20 @@
 // Package review is the review object of a change (ADR 0080): a reviewer builds a review up, with a global comment and
-// one entry per change impact (its own comment and outcome), then submits it; the submission applies every entry as an
+// one entry per change impact (its own comment and outcome), then submits it; the submission decides every entry as an
 // ordinary review of the impact, all of them or none. The review is an item of the change of the built-in kind
-// domain.KindReview (ADR 0105: every verdict on an impact is made by a submitted review, the graph writes the record of
-// the ones it makes itself), each version of the item the whole record of its data.key; Reviews folds the items,
+// domain.KindReview (ADR 0105: every verdict on an impact is made by a submitted review, the graph writes the ones it
+// makes itself), each item a delta of the review of its data.key (ADR 0105 addendum: the gesture only, the verdicts
+// derived from the submission by the view of the change); Reviews folds the items,
 // Service (service.go) is the use case over a Port that builds a review up and submits it. pkg/graph and pkg/domain
 // know nothing of this package: the record format is domain's, the mechanism the graph's (domain.ReviewBatch).
 //
-// Data of a review item: key, flow (the flow branch the entries are reviewed on, "" the main flow), comment (the global
-// comment), status (open, then submitted or discarded: both final), entries ([{impact, comment, outcome}]), by (the
-// author), submittedAt (RFC 3339, once submitted).
+// Data of a review item (domain.ReviewDelta): key, and what the gesture sets: status (open, then submitted or discarded:
+// both final), comment (the global comment), by (the author, when opened), remove (impacts), entries ([{impact,
+// comment, outcome}]: added, or their comment and outcome set).
 package review
 
 import (
 	"errors"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
@@ -85,53 +85,24 @@ func (r Review) Entry(impact string) (Entry, bool) {
 // EffectiveComment is the comment the review of an impact keeps when the review is submitted: the entry's own, then
 // the global one, so that each impact's review keeps both. It is empty only when both are.
 func EffectiveComment(global, entry string) string {
-	global, entry = strings.TrimSpace(global), strings.TrimSpace(entry)
-	switch {
-	case entry == "":
-		return global
-	case global == "":
-		return entry
-	}
-	return entry + "\n\nReview: " + global
+	return domain.ReviewEffectiveComment(global, entry)
 }
 
-// dataOf is the data of an item holding the review (the whole record).
-func dataOf(r Review) map[string]any {
-	return domain.ReviewRecord{Key: r.Key, Flow: r.Flow, Comment: r.Comment, Status: r.Status, Entries: r.Entries, By: r.By, SubmittedAt: r.SubmittedAt}.Data()
-}
-
-// Reviews folds the items of a change into its reviews: the last version of each key, in the order the keys appeared.
-// A review that is submitted or discarded is final: a later version of its key is ignored. A rejected or superseded item
-// is not a version. It is pure.
+// Reviews folds the items of a change into its reviews (domain.ReviewFold: each item a delta of the review of its
+// key), in the order the keys appeared. A review that is submitted or discarded is final: a later delta of its key is
+// ignored. A rejected or superseded item is not a delta. It is pure.
 func Reviews(items []domain.ChangeItem) []Review {
-	out := []Review{}
-	at := map[string]int{}
-	for _, it := range items {
-		if it.Type != KindReview || it.Status == domain.ItemRejected || it.Status == domain.ItemSuperseded {
-			continue
-		}
-		rec := domain.ReviewRecordOf(it.Data)
-		key := rec.Key
-		if key == "" || !domain.ValidReviewStatus(rec.Status) {
-			continue
-		}
-		r := Review{Key: key, Flow: it.Flow, Comment: rec.Comment, Status: rec.Status, Entries: rec.Entries, By: rec.By,
-			SubmittedAt: rec.SubmittedAt, Item: it.ID, Versions: 1}
-		if r.By == "" {
-			r.By = it.ProducedBy
-		}
-		if i, ok := at[key]; ok {
-			if !out[i].Open() {
-				continue
-			}
-			r.Versions = out[i].Versions + 1
-			out[i] = r
-			continue
-		}
-		at[key] = len(out)
-		out = append(out, r)
+	states := domain.ReviewsOf(items).Reviews()
+	out := make([]Review, 0, len(states))
+	for _, s := range states {
+		out = append(out, reviewOf(s))
 	}
 	return out
+}
+
+func reviewOf(s domain.ReviewState) Review {
+	return Review{Key: s.Key, Flow: s.Flow, Comment: s.Comment, Status: s.Status, Entries: slices.Clone(s.Entries), By: s.By,
+		SubmittedAt: s.SubmittedAt, Item: s.Item, Versions: s.Versions}
 }
 
 // Find returns the review of a key.

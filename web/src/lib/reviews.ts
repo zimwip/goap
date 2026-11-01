@@ -1,6 +1,7 @@
 // The review object of a change (ADR 0080): a review built up while open (a global comment, one entry per change
-// impact with its own comment and outcome), then submitted. It is an item of type `review`, each version of the item
-// the whole record of its data.key (the server's review.Reviews); this module folds the items and holds the pure rules
+// impact with its own comment and outcome), then submitted. It is an item of type `review`, each item a delta of the
+// review of its data.key (ADR 0105 addendum, the server's domain.ReviewFold); this module folds the items, derives the
+// verdicts a submission decides, and holds the pure rules
 // the panel shows: which impacts await a review, when a review may be submitted, the comment each impact keeps.
 import type { ChangeImpact, ChangeItem, NodeRef, ReviewEntry, ReviewRecord } from './api';
 import { notAcceptableWhy } from './changeCommit';
@@ -14,45 +15,121 @@ export const OUTCOMES: { id: Outcome; label: string }[] = [
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
-/** The entries of the data of a review item. */
-function entriesOf(data: Record<string, unknown> | undefined): ReviewEntry[] {
-  const list = data?.entries;
-  if (!Array.isArray(list)) return [];
-  return list
-    .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
-    .map((x) => ({ changeImpactId: str(x.impact), comment: str(x.comment), outcome: str(x.outcome) }));
+/** A review as the deltas of its key fold it, with the time each outcome was set and who submitted it. */
+export interface FoldedReview extends ReviewRecord {
+  /** when each entry's outcome was set (the time of its delta: the time of the verdict), by impact */
+  decidedAt: Record<string, string>;
+  /** who decided an entry when it is not the submitter (a merge carrying a sub-change's verdict), by impact */
+  decidedBy: Record<string, string>;
+  submittedBy?: string;
+  execution?: string;
 }
 
-/** The reviews of a change: the last version of each key, in the order the keys appeared. A submitted or discarded
- * review is final (a later version of its key is ignored); a rejected or superseded item is not a version. */
-export function foldReviews(items: ChangeItem[]): ReviewRecord[] {
-  const out: ReviewRecord[] = [];
-  const at = new Map<string, number>();
-  for (const it of items) {
-    if (it.type !== REVIEW_KIND || it.status === 'rejected' || it.status === 'superseded') continue;
-    const data = it.data as Record<string, unknown> | undefined;
-    const key = str(data?.key);
-    const status = str(data?.status);
-    if (!key || !['open', 'submitted', 'discarded'].includes(status)) continue;
-    const r: ReviewRecord = {
-      key,
-      flow: it.flow ?? '',
-      comment: str(data?.comment),
-      status,
-      entries: entriesOf(data),
-      by: str(data?.by) || it.producedBy || '',
-      submittedAt: str(data?.submittedAt),
-      item: it.id,
-      versions: 1,
-    };
-    const i = at.get(key);
-    if (i === undefined) {
-      at.set(key, out.length);
-      out.push(r);
-    } else if (out[i].status === 'open') {
-      r.versions = (out[i].versions ?? 0) + 1;
-      out[i] = r;
+/** The reviews of a change folded from the deltas of their items (ADR 0105 addendum, the server's domain.ReviewFold):
+ * each item is the gesture of the reviewer (status opening, submitting or discarding; comment; remove; entries added or
+ * their comment and outcome set). A submitted or discarded review is final (a later delta is ignored), the first delta
+ * of a key opens it (open, or submitted at once); a rejected or superseded item is not a delta. */
+export class ReviewFold {
+  private at = new Map<string, number>();
+  readonly list: FoldedReview[] = [];
+
+  /** Folds an item; answers the review after it and whether the item submitted it. */
+  apply(it: ChangeItem): { review?: FoldedReview; submitted: boolean } {
+    if (it.type !== REVIEW_KIND || it.status === 'rejected' || it.status === 'superseded') return { submitted: false };
+    const d = (it.data ?? {}) as Record<string, unknown>;
+    const key = str(d.key);
+    const status = str(d.status);
+    if (!key || (status && !['open', 'submitted', 'discarded'].includes(status))) return { submitted: false };
+    const i = this.at.get(key);
+    let r: FoldedReview;
+    if (i !== undefined) {
+      r = this.list[i];
+      if (r.status !== 'open') return { review: r, submitted: false };
+      r = { ...r, entries: [...(r.entries ?? [])], decidedAt: { ...r.decidedAt }, decidedBy: { ...r.decidedBy } };
+    } else {
+      if (status !== 'open' && status !== 'submitted') return { submitted: false };
+      r = { key, flow: it.flow ?? '', comment: '', status: 'open', entries: [], by: str(d.by) || it.producedBy || '', versions: 0, decidedAt: {}, decidedBy: {} };
     }
+    if (typeof d.comment === 'string') r.comment = d.comment.trim();
+    const remove = Array.isArray(d.remove) ? d.remove.map(str) : [];
+    r.entries = (r.entries ?? []).filter((e) => !remove.includes(e.changeImpactId));
+    for (const x of Array.isArray(d.entries) ? d.entries : []) {
+      if (!x || typeof x !== 'object') continue;
+      const m = x as Record<string, unknown>;
+      const imp = str(m.impact);
+      const j = r.entries.findIndex((y) => y.changeImpactId === imp);
+      const e: ReviewEntry = j < 0 ? { changeImpactId: imp, comment: '', outcome: '' } : { ...r.entries[j] };
+      if (j < 0) r.entries.push(e);
+      else r.entries[j] = e;
+      if (typeof m.comment === 'string') e.comment = m.comment.trim();
+      if (typeof m.outcome === 'string') {
+        e.outcome = m.outcome.trim();
+        r.decidedAt[imp] = it.createdAt ?? '';
+      }
+      if (str(m.by)) r.decidedBy[imp] = str(m.by);
+    }
+    if (status) r.status = status;
+    if (r.status === 'submitted') {
+      r.submittedAt = it.createdAt ?? '';
+      r.submittedBy = it.producedBy ?? '';
+      r.execution = it.execution ?? '';
+    }
+    r.item = it.id;
+    r.versions = (r.versions ?? 0) + 1;
+    if (i !== undefined) this.list[i] = r;
+    else {
+      this.at.set(key, this.list.length);
+      this.list.push(r);
+    }
+    return { review: r, submitted: r.status === 'submitted' };
+  }
+}
+
+/** The reviews of a change: the fold of the deltas of each key, in the order the keys appeared. */
+export function foldReviews(items: ChangeItem[]): ReviewRecord[] {
+  const f = new ReviewFold();
+  for (const it of items) f.apply(it);
+  return f.list;
+}
+
+/** A verdict a submitted review decides: never stored, derived from the item that submitted it (ADR 0105 addendum), as
+ * the reviewed event of the server's ReviewState.Verdicts. */
+export interface DerivedVerdict {
+  id: string;
+  changeId?: string;
+  seq?: number;
+  impactId: string;
+  op: 'reviewed';
+  flow?: string;
+  execution?: string;
+  by?: string;
+  at?: string;
+  causation?: string;
+  review: { status: 'accepted' | 'rejected'; by?: string; comment: string; at?: string; flow?: string; execution?: string; reviewId: string };
+}
+
+/** The verdicts a review submitted by an item decides, one per decided entry. */
+export function reviewVerdicts(r: FoldedReview, it: ChangeItem, changeId?: string, seq?: number): DerivedVerdict[] {
+  if (r.status !== 'submitted') return [];
+  const out: DerivedVerdict[] = [];
+  for (const e of r.entries ?? []) {
+    if (e.outcome !== 'accept' && e.outcome !== 'reject') continue;
+    const by = r.decidedBy[e.changeImpactId] || r.submittedBy || r.by || '';
+    const at = r.decidedAt[e.changeImpactId] || it.createdAt || '';
+    const status = e.outcome === 'accept' ? 'accepted' : 'rejected';
+    out.push({
+      id: `${it.id}/${e.changeImpactId}`,
+      changeId,
+      seq,
+      impactId: e.changeImpactId,
+      op: 'reviewed',
+      flow: r.flow,
+      execution: r.execution,
+      by,
+      at,
+      causation: it.id,
+      review: { status, by, comment: effectiveComment(r.comment ?? '', e.comment ?? ''), at, flow: r.flow, execution: r.execution, reviewId: r.key },
+    });
   }
   return out;
 }

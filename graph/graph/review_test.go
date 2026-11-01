@@ -65,21 +65,24 @@ func reviewedEvents(t *testing.T, g *Graph, id domain.ChangeID) []domain.ImpactE
 }
 
 // The batch reviews several impacts in one transaction, each with its own comment and outcome, every review carrying
-// the id of the batch, and writes its item with them (ADR 0080).
+// the id of the batch (ADR 0080); it writes one entry, the review opened and submitted, and the view derives the verdicts
+// from it (ADR 0105 addendum).
 func TestReviewBatch(t *testing.T) { forEachRepo(t, testReviewBatch) }
 
 func testReviewBatch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f, c, imps, _ := reviewWorld(t, repo)
 	g := f.g
-	item := domain.ChangeItem{Type: review.KindReview, Data: map[string]any{"key": "REV-1", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
-		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "reject"}}}}
-	out, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-1", By: "alice", Item: &item, Verdicts: []domain.ImpactVerdict{
+	before := len(logT(t, g, c.ID))
+	out, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-1", By: "alice", Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "fine"},
 		{Impact: imps[1].ID, Status: domain.ReviewRejected, Comment: "no"},
 	}})
 	if err != nil || len(out) != 2 {
 		t.Fatalf("batch: %v %v", out, err)
+	}
+	if l := logT(t, g, c.ID); len(l) != before+1 || l[len(l)-1].Type != domain.LogFact+"."+string(domain.TypeReview) {
+		t.Fatalf("a submission is one entry: %d -> %d", before, len(l))
 	}
 	ch, _ := g.Change(ctx, c.ID)
 	if ch.Nodes[0].Review != domain.ReviewAccepted || ch.Nodes[1].Review != domain.ReviewRejected || ch.Nodes[2].Review != domain.ReviewProposed {
@@ -95,14 +98,13 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	if rs := review.Reviews(ch.Items); len(rs) != 1 || rs[0].Status != review.Submitted {
 		t.Fatalf("item: %+v", rs)
 	}
-	// the record of the review comes first, and is the cause of the entry of each verdict it decides (ADR 0105, 0144
-	// addendum: an acceptance is of one impact)
+	// the submission of the review is the cause of each verdict it decides, at its position (ADR 0105 addendum)
 	causes := causesOf(t, g, c.ID)
 	if len(causes) != 2 {
 		t.Fatalf("causation: %+v", causes)
 	}
 	for _, cause := range causes {
-		if cause.cause.ID != string(rs0(t, g, c.ID, "REV-1")) || cause.cause.Seq >= cause.seq {
+		if cause.cause.ID != string(rs0(t, g, c.ID, "REV-1")) || cause.cause.Seq != cause.seq {
 			t.Fatalf("causation: %+v", causes)
 		}
 	}
@@ -113,7 +115,7 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	evs = reviewedEvents(t, g, c.ID)
 	ch, _ = g.Change(ctx, c.ID)
 	lone, ok := review.Find(ch.Items, evs[2].Review.ReviewID)
-	if !ok || lone.Status != review.Submitted || lone.By != "carol" || len(lone.Entries) != 1 || lone.Entries[0] != (review.Entry{Impact: string(imps[2].ID), Comment: "ok", Outcome: review.Accept}) {
+	if !ok || lone.Status != review.Submitted || lone.By != "carol" || len(lone.Entries) != 1 || lone.Entries[0].Impact != string(imps[2].ID) || lone.Entries[0].Comment != "ok" || lone.Entries[0].Outcome != review.Accept {
 		t.Fatalf("a lone verdict is a submitted review of one entry: %+v (%v)", lone, ok)
 	}
 	if causes := causesOf(t, g, c.ID); len(causes) != 3 || causes[2].cause.ID != string(lone.Item) {
@@ -121,31 +123,40 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	}
 }
 
-// causedVerdict is a reviewed entry of the log and the entry it names as its cause.
+// causedVerdict is the position of a verdict and the entry it names as its cause.
 type causedVerdict struct {
 	seq   int64
 	cause domain.LogEntry
 }
 
-// causesOf lists the decided reviewed entries of the log of a change with their cause, which must be a fact.review entry.
-func causesOf(t *testing.T, g *Graph, id domain.ChangeID) []causedVerdict {
+// logT is the log of a change.
+func logT(t *testing.T, g *Graph, id domain.ChangeID) []domain.LogEntry {
 	t.Helper()
 	entries, _, err := g.ChangeLog(context.Background(), domain.LogFilter{Change: id})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return entries
+}
+
+// causesOf lists the decided verdicts of a change (derived from its log) with their cause, which must be a fact.review
+// entry.
+func causesOf(t *testing.T, g *Graph, id domain.ChangeID) []causedVerdict {
+	t.Helper()
 	byID := map[string]domain.LogEntry{}
-	var out []causedVerdict
-	for _, e := range entries {
+	for _, e := range logT(t, g, id) {
 		byID[e.ID] = e
-		if e.Type != domain.LogImpact+"."+string(domain.ImpactReviewed) || e.Causation == "" {
+	}
+	var out []causedVerdict
+	for _, e := range reviewedEvents(t, g, id) {
+		if e.Causation == "" {
 			continue
 		}
 		cause, ok := byID[e.Causation]
 		if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
-			t.Fatalf("entry %d names cause %q, not an earlier review: %+v", e.Seq, e.Causation, cause)
+			t.Fatalf("verdict %d names cause %q, not a review: %+v", e.Seq, e.Causation, cause)
 		}
-		out = append(out, causedVerdict{seq: e.Seq, cause: cause})
+		out = append(out, causedVerdict{seq: int64(e.Seq), cause: cause})
 	}
 	return out
 }
@@ -182,9 +193,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		return len(entries)
 	}
 	before := logLen()
-	item := domain.ChangeItem{Type: review.KindReview, Data: map[string]any{"key": "REV-2", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
-		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "accept"}}}}
-	_, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-2", By: "bob", Item: &item, Verdicts: []domain.ImpactVerdict{
+	_, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-2", By: "bob", Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "ok"},
 		{Impact: imps[1].ID, Status: domain.ReviewAccepted, Comment: "twice"},
 	}})
@@ -205,7 +214,6 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewProposed, Comment: "x"}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}, {Impact: imps[0].ID, Status: domain.ReviewRejected, Comment: "y"}}},
-		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}}, Item: &domain.ChangeItem{Type: domain.TypeTransition, Data: map[string]any{"to": "x"}}},
 	} {
 		if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, bad); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%+v: %v", bad, err)

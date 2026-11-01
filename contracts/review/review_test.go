@@ -23,12 +23,12 @@ func entries(es ...map[string]any) []any {
 	return out
 }
 
-// Each version of an item is the whole record of its key: the review is the last one, in the order the keys appeared.
+// Each item is a delta of the review of its key: the review is their fold, in the order the keys appeared.
 func TestReviewsFoldKeepsTheLastVersionOfEachKey(t *testing.T) {
 	items := []domain.ChangeItem{
 		item("1", map[string]any{"key": "R1", "status": Open, "comment": "first", "entries": entries()}),
 		item("2", map[string]any{"key": "R2", "status": Open}),
-		item("3", map[string]any{"key": "R1", "status": Open, "comment": "second", "entries": entries(map[string]any{"impact": "i1", "outcome": "accept", "comment": "c"})}),
+		item("3", map[string]any{"key": "R1", "comment": "second", "entries": entries(map[string]any{"impact": "i1", "outcome": "accept", "comment": "c"})}),
 		{ID: "x", Type: domain.TypeArtifact},
 	}
 	got := Reviews(items)
@@ -36,24 +36,25 @@ func TestReviewsFoldKeepsTheLastVersionOfEachKey(t *testing.T) {
 		t.Fatalf("order: %+v", got)
 	}
 	r := got[0]
-	if r.Comment != "second" || r.Versions != 2 || r.Item != "3" || r.By != "alice" || len(r.Entries) != 1 || r.Entries[0] != (Entry{Impact: "i1", Comment: "c", Outcome: Accept}) {
+	if r.Comment != "second" || r.Versions != 2 || r.Item != "3" || r.By != "alice" || len(r.Entries) != 1 || r.Entries[0].Impact != "i1" || r.Entries[0].Comment != "c" || r.Entries[0].Outcome != Accept {
 		t.Fatalf("R1: %+v", r)
 	}
 }
 
 // A submitted or discarded review is final: later versions of its key are ignored; so are rejected items.
 func TestReviewsFinalStatusIsImmutable(t *testing.T) {
-	sub := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Format(time.RFC3339Nano)
+	sub := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	items := []domain.ChangeItem{
 		item("1", map[string]any{"key": "R1", "status": Open}),
-		item("2", map[string]any{"key": "R1", "status": Submitted, "submittedAt": sub, "entries": entries(map[string]any{"impact": "i", "outcome": "reject"})}),
+		item("2", map[string]any{"key": "R1", "status": Submitted, "entries": entries(map[string]any{"impact": "i", "outcome": "reject"})}, func(i *domain.ChangeItem) { i.CreatedAt = sub }),
 		item("3", map[string]any{"key": "R1", "status": Open, "comment": "sneaky"}),
-		item("4", map[string]any{"key": "R2", "status": Discarded}),
-		item("5", map[string]any{"key": "R2", "status": Open}),
+		item("4", map[string]any{"key": "R2", "status": Open}),
+		item("5", map[string]any{"key": "R2", "status": Discarded}),
+		item("5b", map[string]any{"key": "R2", "status": Open}),
 		item("6", map[string]any{"key": "R3", "status": Open}, func(i *domain.ChangeItem) { i.Status = domain.ItemRejected }),
 	}
 	got := Reviews(items)
-	if len(got) != 2 || got[0].Status != Submitted || got[0].Comment != "" || !got[0].SubmittedAt.Equal(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)) || got[1].Status != Discarded {
+	if len(got) != 2 || got[0].Status != Submitted || got[0].Comment != "" || !got[0].SubmittedAt.Equal(sub) || got[1].Status != Discarded {
 		t.Fatalf("%+v", got)
 	}
 	if got[0].Open() || got[0].Ready() {
@@ -99,10 +100,8 @@ func TestValidate(t *testing.T) {
 		"undecided while open":   {map[string]any{"key": "R", "status": Open, "entries": entries(e("a", ""))}, true},
 		"bad outcome":            {map[string]any{"key": "R", "status": Open, "entries": entries(e("a", "maybe"))}, false},
 		"twice":                  {map[string]any{"key": "R", "status": Open, "entries": entries(e("a", ""), e("a", ""))}, false},
-		"submitted no entry":     {map[string]any{"key": "R", "status": Submitted, "submittedAt": "x"}, false},
-		"submitted undecided":    {map[string]any{"key": "R", "status": Submitted, "submittedAt": "x", "entries": entries(e("a", ""))}, false},
-		"submitted no date":      {map[string]any{"key": "R", "status": Submitted, "entries": entries(e("a", "accept"))}, false},
-		"submitted":              {map[string]any{"key": "R", "status": Submitted, "submittedAt": "x", "entries": entries(e("a", "accept"))}, true},
+		"submitted":              {map[string]any{"key": "R", "status": Submitted, "entries": entries(e("a", "accept"))}, true},
+		"a removal":              {map[string]any{"key": "R", "remove": []any{"a"}}, true},
 		"discarded with entries": {map[string]any{"key": "R", "status": Discarded, "entries": entries(e("a", ""))}, true},
 	} {
 		if err := ok(c.d); (err == nil) != c.ok {

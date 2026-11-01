@@ -407,9 +407,9 @@ func pinCommit(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRef)
 	return out
 }
 
-// checkVerdictCauses checks that every verdict of a change was made by a submitted review (ADR 0105): a decided
-// reviewed event names as its cause an earlier fact.review entry, the submitted record of the review whose key the
-// verdict carries, holding the impact with that outcome.
+// checkVerdictCauses checks that every verdict of a change is made by a submitted review and stored nowhere (ADR 0105
+// and its addendum): no reviewed event of the log decides an impact, the view derives each verdict from the delta that
+// submitted its review (its cause, a fact.review entry of the log).
 func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 	entries, err := tx.Log(ctx, domain.LogFilter{Change: id})
 	if err != nil {
@@ -426,22 +426,22 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 			return err
 		}
 		for _, ev := range events {
-			if ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {
-				continue
+			if ev.Review != nil && (ev.Review.Status == domain.ReviewAccepted || ev.Review.Status == domain.ReviewRejected) {
+				return fmt.Errorf("verdict %d on %s is stored: it is derived from the submission of its review", e.Seq, ev.Impact)
 			}
-			cause, ok := seen[e.Causation]
-			if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
-				return fmt.Errorf("verdict %d on %s has no earlier review as its cause (%q)", e.Seq, ev.Impact, e.Causation)
-			}
-			var it domain.ChangeItem
-			if err := json.Unmarshal(cause.Payload, &it); err != nil {
-				return err
-			}
-			rec := domain.ReviewRecordOf(it.Data)
-			i := slices.IndexFunc(rec.Entries, func(x domain.ReviewEntry) bool { return x.Impact == string(ev.Impact) })
-			if rec.Status != domain.ReviewStatusSubmitted || rec.Key != ev.Review.ReviewID || i < 0 || rec.Entries[i].Outcome != domain.ReviewOutcome(ev.Review.Status) {
-				return fmt.Errorf("verdict %d on %s (review %s) is not recorded by its cause %+v", e.Seq, ev.Impact, ev.Review.ReviewID, rec)
-			}
+		}
+	}
+	derived, err := impactEvents(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	for _, ev := range derived {
+		if ev.Op != domain.ImpactReviewed || ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {
+			continue
+		}
+		cause, ok := seen[ev.Causation]
+		if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) || int(cause.Seq) != ev.Seq || ev.Review.ReviewID == "" {
+			return fmt.Errorf("verdict on %s (review %s) is not derived from the submission of its review (%q)", ev.Impact, ev.Review.ReviewID, ev.Causation)
 		}
 	}
 	return nil

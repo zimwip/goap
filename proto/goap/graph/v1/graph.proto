@@ -2185,9 +2185,9 @@ message ImpactNodeReviewBatchRequest {
   string review_id = 2;
   string flow = 3;
   string execution = 4;
+  // the verdicts: the entries of the open review review_id names, else the ones of a review the graph opens and
+  // submits at once
   repeated ImpactVerdict verdicts = 5;
-  // a fact written with the verdicts once they stood
-  ChangeItem item = 6;
 }
 
 message ImpactNodeReviewBatchResponse {

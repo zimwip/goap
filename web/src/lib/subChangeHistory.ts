@@ -5,10 +5,14 @@
 import type { LaneEntry, LaneEdge } from "./components/HistoryGraph.svelte";
 import {
   decodeImpactEvents,
+  decodeLogEntry,
+  int,
   shortId,
+  type ChangeItem,
   type ImpactEvent,
   type LogEntry,
 } from "./api";
+import { ReviewFold, reviewVerdicts } from "./reviews";
 
 /** A change of the family: the parent, the change shown, its sub-changes. */
 export interface FamilyMember {
@@ -127,8 +131,22 @@ function describe(
   }
 }
 
+/** The impact events of a log entry: the ones it carries, or the verdicts a review it submits decides (derived, never
+ * stored: ADR 0105 addendum; reviews folds the review items of the change in order). */
+function eventsOf<T>(l: LogEntry, reviews: ReviewFold): T[] {
+  if (l.type === "fact.review") {
+    const it = decodeLogEntry<ChangeItem>(l);
+    const { review, submitted } = reviews.apply(it);
+    return submitted && review
+      ? (reviewVerdicts(review, it, l.changeId, int(l.seq)) as unknown as T[])
+      : [];
+  }
+  return decodeImpactEvents<T>(l);
+}
+
 /**
- * The rows of the history graph of a family of changes, newest first. logs holds the `impact.` entries of each member.
+ * The rows of the history graph of a family of changes, newest first. logs holds the `impact.` and `fact.review` entries
+ * of each member.
  * key keeps the events of one node only (by its key); empty: every node.
  */
 export function familyEntries(
@@ -142,8 +160,9 @@ export function familyEntries(
   // the parent
   const commits: Commits = new Map();
   for (const m of members) {
+    const reviews = new ReviewFold();
     for (const l of logs.get(m.id) ?? []) {
-      for (const [n, e] of decodeImpactEvents<Event>(l).entries()) {
+      for (const [n, e] of eventsOf<Event>(l, reviews).entries()) {
         const k = committedKey(e);
         const seq = partSeq(l, n);
         if (e.op !== "committed" || !k || e.flow) continue;
@@ -156,8 +175,9 @@ export function familyEntries(
   const merges = new Map<string, { change: string; seq: number }>();
   for (const m of members) {
     const keys = new Map<string, string>();
+    const reviews = new ReviewFold();
     for (const l of logs.get(m.id) ?? [])
-      for (const [n, e] of decodeImpactEvents<Event>(l).entries()) {
+      for (const [n, e] of eventsOf<Event>(l, reviews).entries()) {
         if (e.state?.id && e.state.key) keys.set(e.state.id, e.state.key);
         // the main flow, per change impact; a sub-change's hand-over is drawn on the parent's row that receives it
         if (e.flow || !e.impactId || e.op === "adopted") continue;

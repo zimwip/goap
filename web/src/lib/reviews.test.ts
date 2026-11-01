@@ -6,11 +6,11 @@ const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeIt
 const rec = (r: Partial<ReviewRecord>): ReviewRecord => ({ key: 'R', status: 'open', entries: [], ...r });
 
 describe('foldReviews', () => {
-  it('keeps the last version of each key, in the order the keys appeared', () => {
+  it('folds the deltas of each key, in the order the keys appeared', () => {
     const got = foldReviews([
       item('1', { key: 'R1', status: 'open', comment: 'first' }),
       item('2', { key: 'R2', status: 'open' }),
-      item('3', { key: 'R1', status: 'open', comment: 'second', entries: [{ impact: 'a', outcome: 'accept', comment: 'c' }] }),
+      item('3', { key: 'R1', comment: 'second', entries: [{ impact: 'a', outcome: 'accept', comment: 'c' }] }),
       { id: 'x', type: 'artifact' },
     ]);
     expect(got.map((r) => r.key)).toEqual(['R1', 'R2']);
@@ -22,7 +22,9 @@ describe('foldReviews', () => {
       item('1', { key: 'R1', status: 'open' }),
       item('2', { key: 'R1', status: 'submitted', submittedAt: '2026-01-01T00:00:00Z', entries: [{ impact: 'a', outcome: 'reject' }] }),
       item('3', { key: 'R1', status: 'open', comment: 'sneaky' }),
-      item('4', { key: 'R2', status: 'discarded' }),
+      item('4', { key: 'R2', status: 'open' }),
+      item('4b', { key: 'R2', status: 'discarded' }),
+      item('4c', { key: 'R2', comment: 'sneaky' }),
       item('5', { key: 'R3', status: 'open' }, { status: 'rejected' }),
       item('6', { key: '', status: 'open' }),
       item('7', { key: 'R4', status: 'weird' }),

@@ -905,8 +905,8 @@ func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact
 	return
 }
 
-// emitUpdated records an edit of the draft ref (the updated event with its patch), then sends a decided review back to
-// proposed (editedAgain).
+// emitUpdated records an edit of the draft ref (the updated event with its patch), which sends a decided review back to
+// proposed (editedAgain: derived by the fold).
 func (g *Graph) emitUpdated(ctx context.Context, tx Tx, w *work, ref domain.NodeRef, execution string, patch map[string]any) error {
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactUpdated, Flow: w.flow, Execution: execution, Post: &ref, Patch: patch}); err != nil {
 		return err
@@ -1049,9 +1049,9 @@ func (g *Graph) checkAccepted(ctx context.Context, tx Tx, id domain.ChangeID, fl
 	return g.checkDraftOf(ctx, tx, w.c, w.flow, w.ix, w.seen, w.vcn, d)
 }
 
-// checkAcceptedIn is checkAccepted for a verdict of a batch on the main flow, over the scope of the batch.
+// checkAcceptedIn is checkAccepted for a verdict of a submission, over the scope of the batch.
 func (g *Graph) checkAcceptedIn(ctx context.Context, tx Tx, s *reviewScope, cn domain.ChangeImpact) error {
-	d, err := g.seenDraft(ctx, tx, s.c, "", cn.ID)
+	d, err := g.seenDraft(ctx, tx, s.c, s.flow, cn.ID)
 	if err != nil || d == nil {
 		return err
 	}
@@ -1081,14 +1081,8 @@ func (g *Graph) checkDraftOf(ctx context.Context, tx Tx, c domain.Change, flow s
 // (authorization, guard) when it is taken, and leaves the review as it is (a guard may read it). It follows the event
 // that changed the draft.
 func (g *Graph) editedAgain(ctx context.Context, tx Tx, w *work, execution string) error {
-	if w.vcn.Review == domain.ReviewProposed {
-		return nil
-	}
-	// accepted or rejected, the draft it was reviewed on is gone: the modification is proposed again (ADR 0102)
-	r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: "edited again", Flow: w.flow, Execution: execution}
-	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactReviewed, Flow: w.flow, Execution: execution, By: r.By, Review: &r}); err != nil {
-		return err
-	}
+	// accepted or rejected, the draft it was reviewed on is gone: the modification is proposed again (ADR 0102), as the
+	// fold derives it from the edit (domain.ApplyImpactEventAt, ADR 0105 addendum): nothing is written
 	w.vcn.Review = domain.ReviewProposed
 	return nil
 }

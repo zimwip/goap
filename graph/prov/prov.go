@@ -105,6 +105,9 @@ type builder struct {
 	nodes map[string]map[string]any
 	// impacts are the change impacts as declared so far, to name what a written version revises.
 	impacts map[domain.ChangeImpactID]*domain.ChangeImpact
+	// reviews fold the deltas of the reviews of the change: the one submitting a review decides its verdicts (ADR 0105
+	// addendum)
+	reviews domain.ReviewFold
 }
 
 func (b *builder) graph() []map[string]any {
@@ -390,7 +393,7 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 		b.derogation(n, it)
 	}
 	if it.Type == review.KindReview {
-		b.review(c, n, it)
+		b.review(c, e, n, it)
 	}
 	if len(it.Data) > 0 {
 		n["data"] = it.Data
@@ -399,15 +402,14 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 
 func reviewObjectIRI(key string) string { return iri("review-object", key) }
 
-// review maps a version of a review object (ADR 0080): the entity records the version, and the review itself is an
-// activity of its author that groups the reviewed events of its entries (goap:partOf, set by the event), started when
-// opened and ended when submitted.
-func (b *builder) review(c domain.Change, n map[string]any, it domain.ChangeItem) {
-	rs := review.Reviews([]domain.ChangeItem{it})
-	if len(rs) == 0 {
+// review maps a delta of a review object (ADR 0080): the entity records the delta, and the review itself is an
+// activity of its author that groups the verdicts of its entries (goap:partOf), started when opened and ended when
+// submitted; the delta submitting it decides the verdicts, derived from the fold (ADR 0105 addendum).
+func (b *builder) review(c domain.Change, e domain.LogEntry, n map[string]any, it domain.ChangeItem) {
+	r, submitted := b.reviews.Apply(it)
+	if r.Key == "" {
 		return
 	}
-	r := rs[0]
 	add(n, "@type", "goap:ReviewRecord")
 	set(n, "label", "review "+r.Key+" "+r.Status)
 	act := b.node(reviewObjectIRI(r.Key), "prov:Activity", "goap:ReviewObject")
@@ -426,8 +428,13 @@ func (b *builder) review(c domain.Change, n map[string]any, it domain.ChangeItem
 		add(act, "prov:wasAssociatedWith", ref(p))
 	}
 	add(n, "goap:reviewOf", ref(reviewObjectIRI(r.Key)))
-	for _, e := range r.Entries {
-		add(act, "goap:about", ref(impactIRI(domain.ChangeImpactID(e.Impact))))
+	for _, x := range r.Entries {
+		add(act, "goap:about", ref(impactIRI(domain.ChangeImpactID(x.Impact))))
+	}
+	if submitted {
+		for _, ev := range r.Verdicts(c.ID, it, e.Seq) {
+			b.impact(c, e, ev)
+		}
 	}
 }
 
@@ -589,7 +596,7 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 			// cause of each verdict (ADR 0105)
 			add(rv, "goap:partOf", ref(reviewObjectIRI(ev.Review.ReviewID)))
 			b.node(reviewObjectIRI(ev.Review.ReviewID), "prov:Activity", "goap:ReviewObject")
-			if e.Causation != "" {
+			if e.Causation != "" || ev.Causation != "" {
 				add(rv, "prov:wasInformedBy", ref(reviewObjectIRI(ev.Review.ReviewID)))
 			}
 		}

@@ -415,9 +415,6 @@ func (c *Client) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, 
 	for _, v := range b.Verdicts {
 		req.Verdicts = append(req.Verdicts, &graphv1.ImpactVerdict{ChangeImpactId: string(v.Impact), Accept: v.Status == domain.ReviewAccepted, Comment: v.Comment})
 	}
-	if b.Item != nil {
-		req.Item = pbconv.ItemToPB(*b.Item)
-	}
 	r, err := c.rpc.ImpactNodeReviewBatch(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
