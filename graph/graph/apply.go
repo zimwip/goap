@@ -253,12 +253,12 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, c
 	committed := make([]domain.ImpactEvent, 0, len(a.cposts)+len(reverted))
 	for _, cp := range a.cposts {
 		ref, effect := cp.post.Ref(), cp.effect
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cp.cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Effect: &effect, Commit: result.ID, Branch: domain.BranchOf(a.branch), Recorded: recorded(cp.post, c.ID, cp.cn.ID)})
 	}
 	// a revert commits for the impact withdrawn (the view holds it no more: the entry names the version, ADR 0174)
 	for i, n := range reverted {
 		ref := n.Ref()
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: revertedFor[i], Op: domain.ImpactCommitted, Committed: &ref, Commit: result.ID, Branch: domain.BranchOf(a.branch)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: revertedFor[i], Op: domain.ImpactCommitted, Committed: &ref, Commit: result.ID, Branch: domain.BranchOf(a.branch), Recorded: recorded(n, c.ID, revertedFor[i])})
 	}
 	// one entry for the commit (ADR 0144), at the position its versions name
 	if err := g.emitAt(ctx, tx, a.logSeq, committed...); err != nil {

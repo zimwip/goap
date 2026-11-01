@@ -564,12 +564,13 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		if err := putItem(ctx, tx, id, it); err != nil {
 			return err
 		}
-		// the verdicts judge each other (the origins of an acceptance) and are one entry of the log (ADR 0144): staged,
-		// then flushed. On a flow they are not: what a flow sees is read from the log (flowNodes)
+		// the verdicts judge each other (the origins of an acceptance): staged, then flushed, an entry each (an
+		// acceptance is of one impact; the review submitted is the one fact, ADR 0144 addendum). On a flow they are not
+		// staged: what a flow sees is read from the log (flowNodes)
 		var stage *impactStage
 		var scope *reviewScope
 		if it.Flow == "" {
-			stage = &impactStage{}
+			stage = &impactStage{separate: true}
 			if scope, err = g.newReviewScope(ctx, tx, id); err != nil {
 				return err
 			}

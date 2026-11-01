@@ -374,7 +374,7 @@ func (g *Graph) takeTarget(ctx context.Context, tx Tx, c domain.Change, own *dom
 	committed := make([]domain.ImpactEvent, len(wrote))
 	for i, n := range wrote {
 		ref := n.Ref()
-		committed[i] = domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: b.ID, Branch: domain.BranchOf(own.Name)}
+		committed[i] = domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: b.ID, Branch: domain.BranchOf(own.Name), Recorded: recorded(n, c.ID, n.ChangeImpact)}
 	}
 	return g.emitAt(ctx, tx, seq, committed...)
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -43,9 +45,14 @@ func impactEvents(ctx context.Context, tx Tx, change domain.ChangeID) ([]domain.
 	return decodeImpacts(ctx, tx, entries)
 }
 
-// decodeImpacts reads impact events from their log entries (domain.ImpactEventsOf: one, or the ones an entry carries), the drafts that copy a version as is
-// rebuilt from it (ADR 0142).
+// decodeImpacts reads impact events from their log entries (domain.ImpactEventsOf: one, or the ones an entry carries),
+// the drafts that copy a version as is rebuilt from it (ADR 0142), the versions of a commit from the versions its
+// change wrote (hydrateCommits).
 func decodeImpacts(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.ImpactEvent, error) {
+	entries, err := hydrateCommits(ctx, tx, entries)
+	if err != nil {
+		return nil, err
+	}
 	var out []domain.ImpactEvent // nil when empty, as the stores returned before
 	var bases []domain.NodeRef
 	seen := map[domain.NodeRef]bool{} // a version several events copy is read once: its links would come back once per copy
@@ -188,6 +195,10 @@ func (g *Graph) ChangeLog(ctx context.Context, f domain.LogFilter) (out []domain
 		if out, err = tx.Log(ctx, f); err != nil {
 			return err
 		}
+		// a commit is served naming its versions and impacts
+		if out, err = hydrateCommits(ctx, tx, out); err != nil {
+			return err
+		}
 		all := f
 		all.Types = nil
 		counts, err = tx.LogCounts(ctx, all)
@@ -254,6 +265,63 @@ func appendLogs(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain
 		var err error
 		if out[i], err = tx.AppendLog(ctx, e); err != nil {
 			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// hydrateCommits returns the entries with each commit naming the version and the impact of its nodes (ADR 0144
+// addendum): a node the entry names by its id only is the last version its change wrote of it naming an entry at or
+// before the commit's, read with one statement per change. The entries given are left as they are.
+func hydrateCommits(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.LogEntry, error) {
+	upTo := map[domain.ChangeID]int64{} // the last commit to hydrate of each change
+	for _, l := range entries {
+		nodes, ok, err := domain.CommitNodes(l)
+		if err != nil {
+			return nil, fmt.Errorf("log entry %d (%s): %w", l.Seq, l.Type, err)
+		}
+		if ok && slices.ContainsFunc(nodes, func(n domain.CommittedNode) bool { return !n.Hydrated() }) && l.Seq > upTo[l.Change] {
+			upTo[l.Change] = l.Seq
+		}
+	}
+	if len(upTo) == 0 {
+		return entries, nil
+	}
+	records := map[domain.ChangeID]map[domain.NodeID][]VersionRecord{} // by node, by position
+	for c, seq := range upTo {
+		rs, err := tx.ChangeVersionRecords(ctx, c, seq)
+		if err != nil {
+			return nil, err
+		}
+		byNode := map[domain.NodeID][]VersionRecord{}
+		for _, r := range rs {
+			byNode[r.Node] = append(byNode[r.Node], r)
+		}
+		records[c] = byNode
+	}
+	out := slices.Clone(entries)
+	for i, l := range out {
+		nodes, ok, _ := domain.CommitNodes(l)
+		if !ok || !slices.ContainsFunc(nodes, func(n domain.CommittedNode) bool { return !n.Hydrated() }) {
+			continue
+		}
+		for k, n := range nodes {
+			if n.Hydrated() {
+				continue
+			}
+			rs := records[l.Change][n.ID]
+			at := sort.Search(len(rs), func(j int) bool { return rs[j].LogSeq > l.Seq }) - 1
+			if at < 0 {
+				return nil, fmt.Errorf("log entry %d of change %s commits node %s, of which the change wrote no version by then", l.Seq, l.Change, n.ID)
+			}
+			nodes[k].Version, nodes[k].Impact = rs[at].Version, rs[at].Impact
+		}
+		var err error
+		if out[i], err = domain.WithCommitNodes(l, nodes); err != nil {
+			return nil, err
+		}
+		if len(nodes) == 1 && out[i].Subject == "" {
+			out[i].Subject = string(nodes[0].Impact)
 		}
 	}
 	return out, nil

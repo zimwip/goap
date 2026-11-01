@@ -1583,6 +1583,27 @@ func (t *pgTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]dom
 	return out, rows.Err()
 }
 
+// ChangeVersionRecords implements Tx.
+func (t *pgTx) ChangeVersionRecords(ctx context.Context, change domain.ChangeID, upTo int64) ([]VersionRecord, error) {
+	rows, err := t.tx.Query(ctx, dialectPG.sqlChangeVersionRecords(), string(change), upTo)
+	if err != nil {
+		return nil, mapErr(err, "change version records")
+	}
+	defer rows.Close()
+	var out []VersionRecord
+	for rows.Next() {
+		var r VersionRecord
+		var node, impact string
+		var v int
+		if err := rows.Scan(&node, &v, &impact, &r.LogSeq); err != nil {
+			return nil, err
+		}
+		r.Node, r.Version, r.Impact = domain.NodeID(node), domain.Version(v), domain.ChangeImpactID(impact)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error) {
 	q, args := dialectPG.sqlNodeChangePage(node, before, limit)
 	rows, err := t.tx.Query(ctx, q, args...)

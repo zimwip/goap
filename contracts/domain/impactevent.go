@@ -48,7 +48,9 @@ const (
 	// ImpactCommitted records the version a change applied (Committed) in the commit it produced (Commit): on its own
 	// branch when it is committed (the version is written from the draft then, which goes: Post becomes that version,
 	// ADR 0079), and again on the branch it is integrated into. The last one is the version on the target branch. A
-	// merge change records the same for the versions it writes.
+	// merge change records the same for the versions it writes. A commit is one event in the log, naming the nodes it
+	// commits (ADR 0144 addendum: ImpactBatchEntry); it is read back as one ImpactEvent per node, the fold applying it
+	// to each impact.
 	ImpactCommitted ImpactOp = "committed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
@@ -131,9 +133,13 @@ type ImpactEvent struct {
 	Commit CommitID `json:"commit,omitempty"`
 	// Branch is, on committed, the branch the version committed on: the change's own branch at commit, the branch it is
 	// integrated into after (the main flow's: BranchOf).
-	Branch string   `json:"branch,omitempty"`
-	Review *Review  `json:"review,omitempty"` // reviewed, discarded
-	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
+	Branch string `json:"branch,omitempty"`
+	// Recorded is, on committed, set by the writer when the version is the change's own for the impact (node_version
+	// names the change, the impact and an entry at or before the commit's, the last one of the node): the log names the
+	// node only, the graph reads the version and the impact back (ADR 0144 addendum). Not written.
+	Recorded bool     `json:"-"`
+	Review   *Review  `json:"review,omitempty"` // reviewed, discarded
+	Stale    []string `json:"stale,omitempty"`  // adopted: the stale executions
 	// Patch is what an updated event changed on the draft: {"props": {...}, "unset": [...], "owner": unit key,
 	// "addLink": {id, type, toId, toVersion or target, props}, "updateLink": {id, props}, "removeLink": {id, type,
 	// to}}; a transitioned event: {"state": {"from", "to"}} and the "props" / "unset" its actions made. ApplyDraftEvent

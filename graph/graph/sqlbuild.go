@@ -922,6 +922,13 @@ func (d dialect) deleteChangeUsed() []string {
 }
 
 // sqlChangeNodes reads the nodes a change wrote versions of (one argument: the change).
+// sqlChangeVersionRecords lists the versions a change wrote naming an entry of its log up to a position (two arguments:
+// the change, the position), by that position.
+func (d dialect) sqlChangeVersionRecords() string {
+	return `SELECT ` + d.id("node_id") + `, version, coalesce(` + d.id("change_impact") + `, ''), log_seq FROM node_version WHERE change_id = ` + d.ph(1) +
+		` AND log_seq IS NOT NULL AND log_seq > 0 AND log_seq <= ` + d.ph(2) + ` ORDER BY log_seq, node_id`
+}
+
 func (d dialect) sqlChangeNodes() string {
 	return `SELECT DISTINCT ` + d.id("node_id") + ` FROM node_version WHERE change_id = ` + d.ph(1)
 }

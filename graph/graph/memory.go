@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -901,6 +902,25 @@ func (t *memTx) ChangeNodeIDs(_ context.Context, change domain.ChangeID) ([]doma
 		}
 	}
 	slices.Sort(out)
+	return out, nil
+}
+
+// ChangeVersionRecords implements Tx.
+func (t *memTx) ChangeVersionRecords(_ context.Context, change domain.ChangeID, upTo int64) ([]VersionRecord, error) {
+	var out []VersionRecord
+	for _, vs := range t.st.versions {
+		for _, n := range vs {
+			if n.ChangeID == change && n.LogSeq > 0 && n.LogSeq <= upTo {
+				out = append(out, VersionRecord{Node: n.ID, Version: n.Version, Impact: n.ChangeImpact, LogSeq: n.LogSeq})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b VersionRecord) int {
+		if a.LogSeq != b.LogSeq {
+			return cmp.Compare(a.LogSeq, b.LogSeq)
+		}
+		return strings.Compare(string(a.Node), string(b.Node))
+	})
 	return out, nil
 }
 
