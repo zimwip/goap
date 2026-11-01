@@ -78,28 +78,37 @@ func (g *Graph) seenDrafts(ctx context.Context, tx Tx, c domain.Change, flow str
 
 // seenDraft is the draft a flow sees for a change impact (nil: none).
 func (g *Graph) seenDraft(ctx context.Context, tx Tx, c domain.Change, flow string, impact domain.ChangeImpactID) (*domain.Draft, error) {
+	d, shared, err := g.heldSeenDraft(ctx, tx, c, flow, impact)
+	if shared && d != nil {
+		c := d.Clone()
+		d = &c
+	}
+	return d, err
+}
+
+// heldSeenDraft is seenDraft for a reader that changes nothing of the draft: shared, the view's (read only).
+func (g *Graph) heldSeenDraft(ctx context.Context, tx Tx, c domain.Change, flow string, impact domain.ChangeImpactID) (*domain.Draft, bool, error) {
 	if chain := flowChain(c, flow); len(staleOf(chain)) == 0 {
 		// the draft of the innermost flow of the chain holding one, as seenDrafts finds it, without copying the others
 		st, err := g.draftState(ctx, tx, c.ID)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		for _, f := range append(flowIDs(chain), "") {
 			if d, ok := st.draft(impact, f); ok {
-				d = d.Clone()
-				return &d, nil
+				return &d, true, nil
 			}
 		}
-		return nil, nil
+		return nil, false, nil
 	}
 	m, err := g.seenDrafts(ctx, tx, c, flow)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if d, ok := m[impact]; ok {
-		return &d, nil
+		return &d, false, nil
 	}
-	return nil, nil
+	return nil, false, nil
 }
 
 // draftReader reads nodes as a flow of a change sees them: a draft reference (a node the flow holds a draft of) is the

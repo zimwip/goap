@@ -99,6 +99,18 @@ func (c *versionCache) links(ref domain.NodeRef) ([]domain.Link, bool) {
 	return cloneLinks(e.links), true
 }
 
+// peek is the entry of a version as kept, shared: what it holds is read only.
+func (c *versionCache) peek(ref domain.NodeRef) (versionEntry, bool) { return c.entries.Get(ref) }
+
+// heldLinks are the links a version holds, when known, shared: read only.
+func (c *versionCache) heldLinks(ref domain.NodeRef) ([]domain.Link, bool) {
+	e, ok := c.entries.Get(ref)
+	if !ok || !e.hasLinks || !e.exists {
+		return nil, false
+	}
+	return e.links, true
+}
+
 // set is how a version holds its links, when known.
 func (c *versionCache) set(ref domain.NodeRef) (LinkSet, bool) {
 	e, ok := c.entries.Get(ref)
@@ -159,9 +171,8 @@ func (t *guardTx) keepNode(gen uint64, n domain.Node) {
 	if t.nodes == nil {
 		t.nodes = map[domain.NodeRef]domain.Node{}
 	}
-	t.nodes[n.Ref()] = n
-	kept := copyNode(n)
-	t.g.versions.update(gen, n.Ref(), func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
+	t.nodes[n.Ref()] = n // shared with the cache: its readers get copies (Node)
+	t.g.versions.update(gen, n.Ref(), func(e *versionEntry) { e.node, e.hasNode, e.exists = n, true, true })
 }
 
 // copyNode is a node its reader may change.
@@ -172,30 +183,51 @@ func copyNode(n domain.Node) domain.Node {
 	return n
 }
 
-// OutLinks reads the links a version holds, kept for the versions that cannot change.
+// OutLinks reads the links a version holds, kept for the versions that cannot change: a copy its reader may change.
 func (t *guardTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
+	ls, shared, err := t.heldLinks(ctx, ref)
+	if shared {
+		ls = cloneLinks(ls)
+	}
+	return ls, err
+}
+
+// heldLinks reads the links a version holds, kept for the versions that cannot change. shared: the slice is the
+// cache's or the transaction's, read only (a reader that changes it copies it first; clipped, so an append copies).
+func (t *guardTx) heldLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, bool, error) {
 	if ls, ok := t.wroteLinks[ref]; ok && ref.Version > 0 && t.written[ref] {
-		return cloneLinks(ls), nil
+		return ls, true, nil
 	}
 	if !t.fixed(ref) {
-		return t.Tx.OutLinks(ctx, ref)
+		ls, err := t.Tx.OutLinks(ctx, ref)
+		return ls, false, err
 	}
-	if ls, ok := t.g.versions.links(ref); ok {
-		return ls, nil
+	if ls, ok := t.g.versions.heldLinks(ref); ok {
+		return ls, true, nil
 	}
 	gen := t.g.versions.generation()
 	ls, err := t.Tx.OutLinks(ctx, ref)
 	if err != nil {
-		return ls, err
+		return ls, false, err
 	}
 	// an empty set is kept only for a version known to exist: the links of a version not written yet are none until
 	// it is
-	kept := cloneLinks(ls)
+	kept := slices.Clip(ls)
 	t.g.versions.update(gen, ref, func(e *versionEntry) {
 		e.links, e.hasLinks = kept, true
 		e.exists = e.exists || len(kept) > 0
 	})
-	return ls, nil
+	return kept, true, nil
+}
+
+// heldOutLinks reads the links a version holds for a reader that changes nothing of them (nor of their properties):
+// through the cache of the versions, no copy.
+func heldOutLinks(ctx context.Context, tx Tx, ref domain.NodeRef) ([]domain.Link, error) {
+	if t, ok := unwrapGuard(tx); ok {
+		ls, _, err := t.heldLinks(ctx, ref)
+		return ls, err
+	}
+	return tx.OutLinks(ctx, ref)
 }
 
 // LinkSetOf reads how a version holds its links, kept for the versions that cannot change.
@@ -218,6 +250,15 @@ func (t *guardTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, e
 // prefetch reads in one batch the versions refs, their link sets and their links, for the operation that reads them
 // one by one next (a commit, a merge, a review of N nodes reads N versions: three statements instead of 3N).
 func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
+	return t.prefetchWith(ctx, refs, true)
+}
+
+// prefetchNodes reads in one batch the versions refs, for an operation that reads none of their links.
+func (t *guardTx) prefetchNodes(ctx context.Context, refs []domain.NodeRef) error {
+	return t.prefetchWith(ctx, refs, false)
+}
+
+func (t *guardTx) prefetchWith(ctx context.Context, refs []domain.NodeRef, withLinks bool) error {
 	var nodes, links, written []domain.NodeRef
 	seen := map[domain.NodeRef]bool{}
 	for _, r := range refs {
@@ -228,7 +269,7 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 			if _, ok := t.nodes[r]; !ok {
 				nodes = append(nodes, r)
 			}
-			if _, ok := t.wroteLinks[r]; !ok {
+			if _, ok := t.wroteLinks[r]; !ok && withLinks {
 				written = append(written, r)
 			}
 			continue
@@ -237,19 +278,18 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 			continue
 		}
 		seen[r] = true
+		e, _ := t.g.versions.peek(r)
 		if _, ok := t.nodes[r]; !ok {
-			if n, ok := t.g.versions.node(r); ok {
+			if e.hasNode {
 				if t.nodes == nil {
 					t.nodes = map[domain.NodeRef]domain.Node{}
 				}
-				t.nodes[r] = n
+				t.nodes[r] = e.node // shared: its readers get copies (Node)
 			} else {
 				nodes = append(nodes, r)
 			}
 		}
-		_, hasLinks := t.g.versions.links(r)
-		_, hasSet := t.g.versions.set(r)
-		if !hasLinks || !hasSet {
+		if withLinks && (!e.hasLinks || !e.exists || !e.hasSet) {
 			links = append(links, r)
 		}
 	}
@@ -284,6 +324,9 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 		for _, l := range ls {
 			t.wroteLinks[l.From] = append(t.wroteLinks[l.From], l) // in the order of their ids, as OutLinks reads them
 		}
+		for _, r := range written {
+			t.wroteLinks[r] = slices.Clip(t.wroteLinks[r])
+		}
 	}
 	if len(links) == 0 {
 		return nil
@@ -305,7 +348,7 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 		if !ok {
 			continue // no such version
 		}
-		kept := cloneLinks(held[r])
+		kept := slices.Clip(held[r]) // read for the cache only: shared as is
 		t.g.versions.update(gen, r, func(e *versionEntry) {
 			e.set, e.hasSet, e.links, e.hasLinks, e.exists = s, true, kept, true, true
 		})
@@ -317,6 +360,14 @@ func (t *guardTx) prefetch(ctx context.Context, refs []domain.NodeRef) error {
 func prefetchVersions(ctx context.Context, tx Tx, refs []domain.NodeRef) error {
 	if t, ok := unwrapGuard(tx); ok && len(refs) > 0 {
 		return t.prefetch(ctx, refs)
+	}
+	return nil
+}
+
+// prefetchVersionNodes reads in one batch the versions refs, none of their links, when the transaction keeps them.
+func prefetchVersionNodes(ctx context.Context, tx Tx, refs []domain.NodeRef) error {
+	if t, ok := unwrapGuard(tx); ok && len(refs) > 0 {
+		return t.prefetchNodes(ctx, refs)
 	}
 	return nil
 }

@@ -144,7 +144,7 @@ func (g *Graph) storedVersion(ctx context.Context, tx Tx, ref domain.NodeRef, wi
 	if !withLinks {
 		return out, nil
 	}
-	links, err := tx.OutLinks(ctx, n.Ref())
+	links, err := heldOutLinks(ctx, tx, n.Ref())
 	if err != nil {
 		return domain.Draft{}, err
 	}

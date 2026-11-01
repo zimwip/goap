@@ -274,7 +274,7 @@ func (g *Graph) within(ctx context.Context, tx Tx, kind string, u, of lnk.URL) (
 		if err != nil {
 			return false, err
 		}
-		links, err := tx.OutLinks(ctx, n.Ref())
+		links, err := heldOutLinks(ctx, tx, n.Ref())
 		if err != nil {
 			return false, err
 		}

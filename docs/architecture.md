@@ -681,8 +681,12 @@ which may be another graph, by its own subscription (`access.Directory.FollowEve
 a change it creates being kept at `PutChange` (`roots`), so the lock reads no root; a fact appended by the
 transaction is folded into the view of its change (`guardTx.foldFact`), so the log is not read again after it, and
 the fold of a change whose log holds nothing past it reads no log; the versions a transaction wrote and read back are
-kept by the graph once it commits (the version cache), so the next write naming them (a link's target type) reads
-none. A commit asks the light check when no guardian of the change judges it (`Graph.judgesCommit`: no outer
+kept by the graph once it commits (the version cache), with the links read back, so the next write naming them (a
+link's target type) reads none. What the version cache and the view of a change hold is shared, never copied for a
+reader that changes nothing (`heldOutLinks`, `heldSeenDraft`, the presence checks of `guardTx.prefetch`; a slice
+kept is clipped, so an append copies it); `OutLinks`, `Node`, `seenDraft` and the drafts of `draftsOf` answer copies
+for the others, and the fold copies on write what a patch changes (`domain.applyDraft`). The guardian's blackboard
+of a commit reads the versions only (`prefetchVersionNodes`), never their links. A commit asks the light check when no guardian of the change judges it (`Graph.judgesCommit`: no outer
 guardian, and the lifecycles, `CommitJudge`, say so; `guardianclient` judges only a change scoped to an Activity):
 the drafts' versions and their committable states, with no links entering, no history, no dependencies.
 

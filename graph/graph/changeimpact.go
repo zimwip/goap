@@ -683,7 +683,7 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 // checkModifies refuses to accept a change impact that modifies nothing (ADR 0102): a candidate never checked out, or a
 // draft left as it was checked out. Only a modification is accepted, whoever accepts it.
 func (g *Graph) checkModifies(ctx context.Context, tx Tx, c domain.Change, flow string, cn domain.ChangeImpact) error {
-	d, err := g.seenDraft(ctx, tx, c, flow, cn.ID)
+	d, _, err := g.heldSeenDraft(ctx, tx, c, flow, cn.ID) // read only (draftModifies)
 	if err != nil {
 		return err
 	}

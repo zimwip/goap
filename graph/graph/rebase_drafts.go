@@ -177,7 +177,7 @@ func (g *Graph) rebaseDraftsTx(ctx context.Context, tx Tx, c domain.Change, node
 		if err != nil {
 			return "", nil, err
 		}
-		theirsLinks, err := tx.OutLinks(ctx, r.head)
+		theirsLinks, err := heldOutLinks(ctx, tx, r.head)
 		if err != nil {
 			return "", nil, err
 		}

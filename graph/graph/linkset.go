@@ -45,7 +45,7 @@ func (g *Graph) planLinks(ctx context.Context, tx Tx, n domain.Node, links []dom
 		if prev.ID == "" {
 			prev = ref
 		}
-		held, err := tx.OutLinks(ctx, ref)
+		held, err := heldOutLinks(ctx, tx, ref)
 		if err != nil {
 			return linkPlan{}, err
 		}
@@ -70,7 +70,7 @@ func (g *Graph) planLinks(ctx context.Context, tx Tx, n domain.Node, links []dom
 		if b, ok, err := baseSet(ctx, tx, prev, set, seq); err != nil {
 			return linkPlan{}, err
 		} else if ok && len(links) > 0 {
-			held, err := tx.OutLinks(ctx, domain.NodeRef{ID: n.ID, Version: b.Of})
+			held, err := heldOutLinks(ctx, tx, domain.NodeRef{ID: n.ID, Version: b.Of})
 			if err != nil {
 				return linkPlan{}, err
 			}
