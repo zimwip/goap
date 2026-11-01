@@ -66,10 +66,9 @@ where to where, and why.
    (`recordInParent`) records the parent's impact in the parent's log as before; the versions joined keep the row of the
    sub-change that wrote them.
 6. **Readers.**
-   - The changes acting on a node (`NodeChanges`, `Tx.NodeChangePage`) are read from the log: an impact entry carrying
-     one event names its node (`domain.ImpactEvent.NodeID`, `LogEntry.Node`, column `change_log.node`, index
-     `change_log_node (node, seq, change_id) WHERE node <> ''`); the cursor is the position of the change's first
-     entry naming it. It lists the changes that worked on the node, committed or not (a creation cancelled included).
+   - The changes acting on a node (`NodeChanges`, `Tx.NodeChangePage`): since ADR 0180 the log names no node; the
+     changes that committed it are read from its versions (the cursor the first entry committing one), the open ones
+     from their views (the cursor the first event of an impact naming it), committed or not.
    - The difference of two baselines reads the nodes of the changes it spans from their rows (and their branches).
    - The provenance of an export, an adoption and the keys of a change's index document read the view.
    - The uniqueness of a live impact per node and flow is a rule of the fold, checked by the operations under the

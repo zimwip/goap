@@ -1420,7 +1420,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		// its position is known: the insert waits for the next statement, or the commit
 		e.Seq = seq
 		insert, args := dialectPG.sqlInsert("change_log", append([]string{"seq"}, changeLogColumns...), ""),
-			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, nullUUID(string(e.Node))}
+			[]any{seq, e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload}
 		if t.pipe == nil {
 			_, err := q.Exec(ctx, insert, args...)
 			return e, mapErr(err, "log entry "+e.Type)
@@ -1429,7 +1429,7 @@ func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntr
 		return e, nil
 	}
 	err := q.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload, nullUUID(string(e.Node))).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, payload).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -1467,11 +1467,11 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	t.dropNext() // the positions it takes come after any taken before
 	n := len(entries)
-	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads, nodes := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
+	ids, changes, types, flows, procs, execs, subjects, bys, causes, payloads := make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n), make([]string, n)
 	ats := make([]time.Time, n)
 	for i, e := range entries {
 		ids[i], changes[i], types[i], flows[i], procs[i], execs[i], subjects[i], bys[i], causes[i], ats[i] = e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At
-		payloads[i], nodes[i] = string(e.Payload), string(e.Node)
+		payloads[i] = string(e.Payload)
 		if len(e.Payload) == 0 {
 			payloads[i] = "null"
 		}
@@ -1482,10 +1482,10 @@ func (t *pgTx) AppendLogs(ctx context.Context, entries []domain.LogEntry) ([]dom
 	}
 	// the rows are inserted, and take their positions, in the order of the array
 	rows, err := q.Query(ctx, `INSERT INTO change_log (`+strings.Join(changeLogColumns, ", ")+`)
-		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb, nullif(node, '')::uuid
-		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[], $12::text[])
-			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, node, o)
-		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads, nodes)
+		SELECT id, change_id::uuid, type, flow, process_id, execution, subject, by_whom, causation, at, payload::jsonb
+		FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::text[])
+			WITH ORDINALITY AS e (id, change_id, type, flow, process_id, execution, subject, by_whom, causation, at, payload, o)
+		ORDER BY o RETURNING id, seq`, ids, changes, types, flows, procs, execs, subjects, bys, causes, ats, payloads)
 	if err != nil {
 		return nil, mapErr(err, "log entries")
 	}

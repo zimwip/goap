@@ -59,14 +59,11 @@ type LogEntry struct {
 	// Process is the process of a journal record; Execution the action run behind the entry (a journal record is
 	// its own); Subject what it is about (the action, the fact type, the change impact); By the principal or
 	// component.
-	Process   string `json:"process,omitempty"`
-	Execution string `json:"execution,omitempty"`
-	Subject   string `json:"subject,omitempty"`
-	// Node is the node an impact entry of one event is about (ADR 0174): the changes acting on a node are read from the
-	// log by it. Empty for an entry carrying several events (their impacts named their node in an entry before).
-	Node NodeID    `json:"node,omitempty"`
-	By   string    `json:"by,omitempty"`
-	At   time.Time `json:"at"`
+	Process   string    `json:"process,omitempty"`
+	Execution string    `json:"execution,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	By        string    `json:"by,omitempty"`
+	At        time.Time `json:"at"`
 	// Causation is the ID of the entry this one follows from (ADR 0105): a decided review of a change impact names the
 	// submitted review (fact.review) that decided it. Empty when the entry has no cause in the log.
 	Causation string          `json:"causation,omitempty"`
@@ -116,11 +113,12 @@ func (f LogFilter) Match(e LogEntry) bool {
 		e.Seq > f.AfterSeq
 }
 
-// FactEntry is the log entry of a fact. A flow event belongs to the flow it opens, adopts or discards.
+// FactEntry is the log entry of a fact. A flow event belongs to the flow it opens, adopts or discards. The payload
+// leaves to the columns what they hold of the item (ADR 0180): its id, type, time and execution, its author, flow and
+// target when the columns hold them as is (ItemOf puts them back).
 func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
-	raw, err := json.Marshal(it)
 	e := LogEntry{ID: string(it.ID), Change: change, Type: LogFact + "." + string(it.Type), Flow: it.Flow, Execution: it.Execution,
-		Subject: it.Target, By: it.ProducedBy, At: it.CreatedAt, Payload: raw}
+		Subject: it.Target, By: it.ProducedBy, At: it.CreatedAt}
 	if f := it.FlowEvent; f != nil {
 		e.Flow, e.Subject = f.Flow, f.Op
 		if f.By != "" {
@@ -133,7 +131,71 @@ func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 			e.By = d.By
 		}
 	}
+	p := itemPayload{ChangeItem: it}
+	if it.Flow != e.Flow {
+		p.Flow = &it.Flow
+	}
+	if it.Target != e.Subject {
+		p.Target = &it.Target
+	}
+	if it.ProducedBy != e.By {
+		p.ProducedBy = &it.ProducedBy
+	}
+	var err error
+	e.Payload, err = json.Marshal(p)
 	return e, err
+}
+
+// itemPayload is a fact as its log entry stores it: what the columns hold left out, what differs from them written.
+type itemPayload struct {
+	ChangeItem
+	ID         absent  `json:"id,omitempty"`
+	Type       absent  `json:"type,omitempty"`
+	CreatedAt  absent  `json:"createdAt,omitempty"`
+	Execution  absent  `json:"execution,omitempty"`
+	Flow       *string `json:"flow,omitempty"`
+	Target     *string `json:"target,omitempty"`
+	ProducedBy *string `json:"producedBy,omitempty"`
+}
+
+// itemIn reads an item payload: what it leaves to the columns told apart from what it writes empty.
+type itemIn struct {
+	ChangeItem
+	Flow       *string `json:"flow"`
+	Target     *string `json:"target"`
+	ProducedBy *string `json:"producedBy"`
+}
+
+// ItemOf is the fact a log entry records (FactEntry): its payload with what it leaves to the columns.
+func ItemOf(l LogEntry) (ChangeItem, error) {
+	var in itemIn
+	if err := json.Unmarshal(l.Payload, &in); err != nil {
+		return in.ChangeItem, err
+	}
+	it := in.ChangeItem
+	if it.ID == "" {
+		it.ID = ItemID(l.ID)
+	}
+	if it.Type == "" {
+		it.Type = ItemType(strings.TrimPrefix(l.Type, LogFact+"."))
+	}
+	if it.CreatedAt.IsZero() {
+		it.CreatedAt = l.At
+	}
+	if it.Execution == "" {
+		it.Execution = l.Execution
+	}
+	it.Flow, it.Target, it.ProducedBy = l.Flow, l.Subject, l.By
+	if in.Flow != nil {
+		it.Flow = *in.Flow
+	}
+	if in.Target != nil {
+		it.Target = *in.Target
+	}
+	if in.ProducedBy != nil {
+		it.ProducedBy = *in.ProducedBy
+	}
+	return it, nil
 }
 
 // ImpactEntry is the log entry of an impact event: its envelope in the columns, the rest in the payload (ADR 0142;
@@ -144,5 +206,5 @@ func ImpactEntry(e ImpactEvent) (LogEntry, error) {
 	}
 	raw, err := marshalImpact(e)
 	return LogEntry{ID: e.ID, Change: e.Change, Type: LogImpact + "." + string(e.Op), Flow: e.Flow, Execution: e.Execution,
-		Subject: string(e.Impact), Node: e.NodeID(), By: e.By, At: e.At, Causation: e.Causation, Payload: raw}, err
+		Subject: string(e.Impact), By: e.By, At: e.At, Causation: e.Causation, Payload: raw}, err
 }

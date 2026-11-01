@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -119,7 +120,7 @@ func (d ReviewDelta) Data() map[string]any {
 		out["remove"] = rm
 	}
 	if len(d.Entries) > 0 {
-		entries := make([]any, len(d.Entries))
+		ms := make([]map[string]any, len(d.Entries))
 		for i, e := range d.Entries {
 			m := map[string]any{"impact": e.Impact}
 			if e.Comment != nil {
@@ -131,11 +132,62 @@ func (d ReviewDelta) Data() map[string]any {
 			if e.By != "" {
 				m["by"] = e.By
 			}
-			entries[i] = m
+			ms[i] = m
+		}
+		if defaults := entryDefaults(ms); len(defaults) > 0 {
+			out[reviewDefaultsKey] = defaults
+		}
+		entries := make([]any, len(ms))
+		for i, m := range ms {
+			if len(m) == 1 {
+				entries[i] = m["impact"] // its impact alone: the defaults say the rest
+			} else {
+				entries[i] = m
+			}
 		}
 		out["entries"] = entries
 	}
 	return out
+}
+
+// reviewDefaultsKey holds what most entries of a delta set alike (ADR 0180): each entry writes what differs from it,
+// null for a field it leaves unset, often its impact alone.
+const reviewDefaultsKey = "defaults"
+
+// entryFields are the fields of an entry a delta's defaults may hold.
+var entryFields = []string{"outcome", "comment", "by"}
+
+// entryDefaults takes out of the entries the value of each field most of them hold (two at least), and returns them.
+func entryDefaults(ms []map[string]any) map[string]any {
+	if len(ms) < 2 {
+		return nil
+	}
+	defaults := map[string]any{}
+	for _, f := range entryFields {
+		count := map[string]int{}
+		best, n := "", 0
+		for _, m := range ms {
+			if v, ok := m[f].(string); ok {
+				count[v]++
+				if c := count[v]; c > n {
+					best, n = v, c
+				}
+			}
+		}
+		if n < 2 {
+			continue
+		}
+		defaults[f] = best
+		for _, m := range ms {
+			switch v, ok := m[f]; {
+			case ok && v == best:
+				delete(m, f)
+			case !ok:
+				m[f] = nil // unset: not the default
+			}
+		}
+	}
+	return defaults
 }
 
 // ReviewDeltaOf reads the delta of the data of a review item.
@@ -147,7 +199,17 @@ func ReviewDeltaOf(d map[string]any) ReviewDelta {
 			out.Remove = append(out.Remove, strings.TrimSpace(s))
 		}
 	}
+	defaults, _ := d[reviewDefaultsKey].(map[string]any)
 	add := func(m map[string]any) {
+		if len(defaults) > 0 {
+			full := maps.Clone(m)
+			for f, v := range defaults {
+				if _, ok := full[f]; !ok {
+					full[f] = v
+				}
+			}
+			m = full
+		}
 		out.Entries = append(out.Entries, ReviewEntryEdit{Impact: reviewString(m, "impact"), Comment: reviewOptional(m, "comment"),
 			Outcome: reviewOptional(m, "outcome"), By: reviewString(m, "by")})
 	}
@@ -158,8 +220,11 @@ func ReviewDeltaOf(d map[string]any) ReviewDelta {
 		}
 	default:
 		for _, x := range reviewList(v) {
-			if m, ok := x.(map[string]any); ok {
-				add(m)
+			switch e := x.(type) {
+			case map[string]any:
+				add(e)
+			case string:
+				add(map[string]any{"impact": e})
 			}
 		}
 	}
@@ -187,8 +252,8 @@ func reviewString(d map[string]any, k string) string {
 
 func reviewOptional(d map[string]any, k string) *string {
 	v, ok := d[k]
-	if !ok {
-		return nil
+	if !ok || v == nil {
+		return nil // unset (null: an entry not taking its delta's default, ADR 0180)
 	}
 	s, _ := v.(string)
 	s = strings.TrimSpace(s)

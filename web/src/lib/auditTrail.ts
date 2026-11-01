@@ -326,7 +326,8 @@ function fromEvent(
       break;
     }
     case "updated":
-      summary = `${v(e.post)} edited: ${Object.keys(e.patch ?? {}).join(", ")}`;
+      // an edit is of the draft: the log leaves out its post (ADR 0180)
+      summary = `${e.post ? v(e.post) : "draft"} edited: ${Object.keys(e.patch ?? {}).join(", ")}`;
       break;
     case "reviewed":
     case "discarded":

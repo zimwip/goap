@@ -53,9 +53,12 @@ export class ReviewFold {
     if (typeof d.comment === 'string') r.comment = d.comment.trim();
     const remove = Array.isArray(d.remove) ? d.remove.map(str) : [];
     r.entries = (r.entries ?? []).filter((e) => !remove.includes(e.changeImpactId));
+    // what most entries set alike is the delta's defaults, an entry its impact alone or what differs (null: unset)
+    const defaults = d.defaults && typeof d.defaults === 'object' ? (d.defaults as Record<string, unknown>) : {};
     for (const x of Array.isArray(d.entries) ? d.entries : []) {
-      if (!x || typeof x !== 'object') continue;
-      const m = x as Record<string, unknown>;
+      const own = typeof x === 'string' ? { impact: x } : x && typeof x === 'object' ? (x as Record<string, unknown>) : undefined;
+      if (!own) continue;
+      const m: Record<string, unknown> = { ...defaults, ...own };
       const imp = str(m.impact);
       const j = r.entries.findIndex((y) => y.changeImpactId === imp);
       const e: ReviewEntry = j < 0 ? { changeImpactId: imp, comment: '', outcome: '' } : { ...r.entries[j] };

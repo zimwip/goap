@@ -205,6 +205,13 @@ func (s *draftState) phaseOf(id domain.ChangeImpactID) (phase, bool) {
 
 // apply folds an event in place: domain.ApplyImpactEvent, then domain.ApplyDraftEvent and domain.ApplyConflictEvent.
 func (s *draftState) apply(e domain.ImpactEvent) {
+	if e.Op == domain.ImpactUpdated && e.Post == nil {
+		// the log leaves out the post of an edit, the draft of its impact's node (ADR 0180)
+		if cn, ok := s.impact(e.Impact); ok && cn.Post != nil {
+			p := *cn.Post
+			e.Post = &p
+		}
+	}
 	s.addEvent(e)
 	s.bytes += eventSize(e)
 	if e.StartsDraft() && e.Flow == "" {
@@ -415,6 +422,28 @@ func (v *viewLookup) OfKey(key string) []int {
 	return at
 }
 func (v *viewLookup) Odd() int { return v.odd }
+
+// firstOn is the position of the first event of an impact of the change naming a node (ok false: none names it).
+func (s *draftState) firstOn(node domain.NodeID) (int64, bool) {
+	at, _ := s.byNode.get(node)
+	held, _ := s.nodes.get(node)
+	if len(at) == 0 && len(held) == 0 {
+		return 0, false
+	}
+	ids := make(map[domain.ChangeImpactID]bool, len(at)+len(held))
+	for _, i := range at {
+		ids[s.impacts.at(i).ID] = true
+	}
+	for _, id := range held {
+		ids[id] = true
+	}
+	for _, e := range s.events {
+		if ids[e.Impact] {
+			return int64(e.Seq), true
+		}
+	}
+	return 0, false
+}
 
 // draftIDs are the impacts holding drafts.
 func (s *draftState) draftIDs() []domain.ChangeImpactID {

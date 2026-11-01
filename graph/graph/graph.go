@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -215,7 +216,7 @@ func newID() string {
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
 // whatever the storage.
 func New(repo Repo) *Graph {
-	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: newID}
+	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC().Round(time.Microsecond) }, newID: newID}
 	g.repo = &ambientRepo{Repo: &guardRepo{Repo: repo, g: g}, g: g}
 	g.newCaches()
 	return g
@@ -1056,13 +1057,45 @@ func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID
 
 // NodeChanges lists a page of the changes acting on a node (ADR 0140): the last limit (0: 50, at most 500) whose cursor
 // is below before (0: up to the latest), oldest first, headers only, and the before of the next older page (0: none).
+// The node belongs to the impacts acting on it (ADR 0180): the changes that committed it are read from its versions (the
+// cursor the first entry committing one), the open ones from their views (the cursor the first event of an impact naming
+// it), committed or not.
 func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID, before int64, limit int) (out []domain.Change, next int64, err error) {
 	limit = pageLimit(limit)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		page, err := tx.NodeChangePage(ctx, node, before, limit+1)
+		open, err := tx.OpenChangeIDs(ctx)
 		if err != nil {
 			return err
 		}
+		cursor := map[domain.ChangeID]int64{}
+		for _, id := range open {
+			st, err := g.foldDrafts(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if seq, ok := st.firstOn(node); ok && (before == 0 || seq < before) {
+				cursor[id] = seq
+			}
+		}
+		// an open change that committed the node has its first event as cursor: its versions do not decide
+		committed, err := tx.NodeChangePage(ctx, node, before, limit+1+len(open))
+		if err != nil {
+			return err
+		}
+		openSet := make(map[domain.ChangeID]bool, len(open))
+		for _, id := range open {
+			openSet[id] = true
+		}
+		page := make([]NodeChange, 0, len(committed)+len(cursor))
+		for _, c := range committed {
+			if !openSet[c.Change] {
+				page = append(page, c)
+			}
+		}
+		for id, seq := range cursor {
+			page = append(page, NodeChange{Change: id, Seq: seq})
+		}
+		slices.SortFunc(page, func(a, b NodeChange) int { return cmp.Compare(b.Seq, a.Seq) })
 		if len(page) > limit {
 			page, next = page[:limit], page[limit-1].Seq
 		}

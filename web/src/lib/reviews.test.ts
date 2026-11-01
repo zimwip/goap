@@ -17,6 +17,22 @@ describe('foldReviews', () => {
     expect(got[0]).toMatchObject({ comment: 'second', versions: 2, item: '3', by: 'alice', entries: [{ changeImpactId: 'a', outcome: 'accept', comment: 'c' }] });
   });
 
+  it('reads the defaults most entries share (ADR 0180)', () => {
+    const got = foldReviews([
+      item('1', {
+        key: 'R1',
+        status: 'submitted',
+        defaults: { outcome: 'accept', comment: 'ok' },
+        entries: ['a', { impact: 'b', outcome: 'reject', comment: 'no' }, { impact: 'c', outcome: null }],
+      }),
+    ]);
+    expect(got[0].entries).toEqual([
+      { changeImpactId: 'a', outcome: 'accept', comment: 'ok' },
+      { changeImpactId: 'b', outcome: 'reject', comment: 'no' },
+      { changeImpactId: 'c', outcome: '', comment: 'ok' },
+    ]);
+  });
+
   it('treats a submitted or discarded review as final', () => {
     const got = foldReviews([
       item('1', { key: 'R1', status: 'open' }),

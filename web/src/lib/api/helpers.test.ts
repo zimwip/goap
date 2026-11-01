@@ -65,14 +65,45 @@ describe("decodeLogEntry", () => {
       ).post,
     ).toBeUndefined();
   });
-  it("leaves a fact as stored", () => {
+  it("puts back what a fact leaves to its entry (ADR 0180)", () => {
     expect(
       decodeLogEntry<{ id: string }>({
         id: "x",
         type: "fact.artifact",
-        payload: '{"id":"a"}',
+        at: "2026-11-01T00:00:00Z",
+        by: "u1",
+        subject: "plan",
+        payload: '{"status":"proposed","flow":""}',
       }),
-    ).toEqual({ id: "a" });
+    ).toEqual({
+      id: "x",
+      type: "artifact",
+      createdAt: "2026-11-01T00:00:00Z",
+      target: "plan",
+      producedBy: "u1",
+      status: "proposed",
+      flow: "",
+    });
+  });
+  it("puts back what a declaration leaves to its entry (ADR 0180)", () => {
+    const e = decodeLogEntry<{ state: Record<string, unknown> }>({
+      id: "e1",
+      type: "impact.proposed",
+      at: "2026-11-01T00:00:00Z",
+      by: "u1",
+      subject: "i1",
+      payload:
+        '{"op":"proposed","state":{"key":"K","type":"alm@T","intent":"modified"}}',
+    });
+    expect(e.state).toEqual({
+      id: "i1",
+      key: "K",
+      type: "alm@T",
+      intent: "modified",
+      review: "proposed",
+      producedBy: "u1",
+      createdAt: "2026-11-01T00:00:00Z",
+    });
   });
 });
 

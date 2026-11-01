@@ -166,18 +166,15 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 				writes = append(writes, writeOf{seq: e.Seq, subject: e.Subject, execution: e.Execution, id: e.ID})
 			}
 		case domain.LogFact:
-			var it struct {
-				Type string         `json:"type"`
-				Data map[string]any `json:"data"`
-			}
-			if json.Unmarshal(e.Payload, &it) != nil {
+			it, err := domain.ItemOf(e)
+			if err != nil {
 				continue
 			}
 			key, _ := it.Data["key"].(string)
 			if key == "" {
 				continue // an item without key is never rewritten: a new one moves nothing a step saw
 			}
-			subject := it.Type + ":" + key
+			subject := string(it.Type) + ":" + key
 			if _, ok := born[subject]; !ok {
 				born[subject] = e.Seq
 				continue
