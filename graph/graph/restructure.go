@@ -157,7 +157,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 		if n == nil {
 			return out, invalidf("change impact %s has no version to merge or split", w.cn.ID)
 		}
-		if d, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
+		if d, _, err := g.heldSeenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 			return out, err
 		} else if d != nil {
 			return out, fmt.Errorf("%s is checked out by change impact %s: cancel the checkout first: %w", n.Key, w.cn.ID, ErrConflict)

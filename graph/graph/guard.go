@@ -78,8 +78,12 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 			gen := r.g.versions.generation()
 			for ref, n := range gt.nodes {
 				if gt.written[ref] {
-					kept := copyNode(n)
-					r.g.versions.update(gen, ref, func(e *versionEntry) { e.node, e.hasNode, e.exists = kept, true, true })
+					r.g.versions.update(gen, ref, func(e *versionEntry) { e.node, e.hasNode, e.exists = n, true, true }) // read only
+				}
+			}
+			for ref, ls := range gt.wroteLinks {
+				if gt.written[ref] && ref.Version > 0 {
+					r.g.versions.update(gen, ref, func(e *versionEntry) { e.links, e.hasLinks, e.exists = ls, true, true }) // read only
 				}
 			}
 		}
@@ -857,7 +861,9 @@ func (t *guardTx) took(branch string, ref domain.NodeRef) {
 	t.forgetLatest(ref.ID)
 	n, ok := t.nodes[ref]
 	if !ok {
-		n, ok = t.g.versions.node(ref)
+		var e versionEntry
+		e, ok = t.g.versions.peek(ref)
+		n, ok = e.node, ok && e.hasNode
 	}
 	switch {
 	case !ok:

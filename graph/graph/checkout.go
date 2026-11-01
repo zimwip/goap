@@ -426,7 +426,7 @@ func (g *Graph) working(ctx context.Context, tx Tx, w *work) (domain.Draft, erro
 	}
 	d, ok := st.draft(w.cn.ID, w.flow)
 	if !ok {
-		if seen, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
+		if seen, _, err := g.heldSeenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 			return domain.Draft{}, err
 		} else if seen != nil {
 			// the draft of a parent flow is that flow's to edit: this flow checks the node out to write its own
@@ -761,7 +761,7 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 	var d domain.Draft
 	var event string
 	var copied *domain.BaseCopy
-	if parent, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
+	if parent, _, err := g.heldSeenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil { // forkDraft copies it
 		return domain.Draft{}, err
 	} else if parent != nil {
 		d = g.forkDraft(w, *parent, execution)
@@ -787,7 +787,7 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		if err := g.checkOwned(ctx, tx, w.c, *base); err != nil {
 			return domain.Draft{}, err
 		}
-		links, err := tx.OutLinks(ctx, base.Ref())
+		links, err := heldOutLinks(ctx, tx, base.Ref())
 		if err != nil {
 			return domain.Draft{}, err
 		}
@@ -953,7 +953,7 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 			found = &l
 		} else if stored != nil && d.Base != nil && d.Base.ID == stored.From.ID {
 			// the stored link is one the version checked out holds (its set may be an earlier version's, ADR 0141)
-			held, err := tx.OutLinks(ctx, *d.Base)
+			held, err := heldOutLinks(ctx, tx, *d.Base)
 			if err != nil {
 				return nil, domain.Draft{}, domain.DraftLink{}, err
 			}

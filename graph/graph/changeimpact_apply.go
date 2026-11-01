@@ -28,7 +28,7 @@ type cpost struct {
 // their outgoing links, the links to a node of the change resolved to the version this commit writes for it; they are
 // checked when written (walkChangeImpacts), the transaction being rolled back when one fails.
 func (a *applier) prepareChangeImpacts() error {
-	rows, err := a.g.drafts(a.ctx, a.tx, a.change.ID)
+	st, err := a.g.draftState(a.ctx, a.tx, a.change.ID)
 	if err != nil {
 		return err
 	}
@@ -38,17 +38,11 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	var todo []commit
 	impacts := a.mainImpacts()
-	// the drafts of the main flow by impact, read once (ownDraft walks them)
-	mainDrafts := make(map[domain.ChangeImpactID]*domain.Draft, len(rows))
-	for i := range rows {
-		if rows[i].Flow == "" {
-			if _, ok := mainDrafts[rows[i].Impact]; !ok {
-				mainDrafts[rows[i].Impact] = &rows[i]
-			}
-		}
-	}
+	// the draft of the main flow of an impact, as the view holds it (shared: read only)
+	heldDraft := func(id domain.ChangeImpactID) (domain.Draft, bool) { return st.draft(id, "") }
+	// a copy the commit may change
 	ownDraft := func(id domain.ChangeImpactID) *domain.Draft {
-		d, ok := mainDrafts[id]
+		d, ok := heldDraft(id)
 		if !ok {
 			return nil
 		}
@@ -62,7 +56,7 @@ func (a *applier) prepareChangeImpacts() error {
 		if cn.Review != domain.ReviewAccepted {
 			continue
 		}
-		if d := ownDraft(cn.ID); d != nil && d.Base != nil {
+		if d, ok := heldDraft(cn.ID); ok && d.Base != nil {
 			bases = append(bases, *d.Base)
 		}
 		if cn.Pre != nil {
@@ -171,7 +165,7 @@ func (a *applier) prepareChangeImpacts() error {
 			}
 			cp.pre = &pre
 			// read with the bases above (prefetchVersions): no statement
-			if preLinks, err = a.tx.OutLinks(a.ctx, pre.Ref()); err != nil {
+			if preLinks, err = heldOutLinks(a.ctx, a.tx, pre.Ref()); err != nil {
 				return err
 			}
 		}

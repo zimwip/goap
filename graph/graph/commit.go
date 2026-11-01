@@ -240,7 +240,7 @@ func (g *Graph) commitEdits(ctx context.Context, in Edits) (res CommitResult, er
 // than the ones the edit removes.
 func (g *Graph) linksTo(ctx context.Context, from domain.NodeRef, typ string, to domain.NodeID, props map[string]any, removed []domain.LinkID) (has bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		out, err := tx.OutLinks(ctx, from)
+		out, err := heldOutLinks(ctx, tx, from)
 		for _, l := range out {
 			has = has || l.Type == typ && l.To.ID == to && !slices.Contains(removed, l.ID) && sameLinkProps(l.Properties, props)
 		}
@@ -304,7 +304,7 @@ func (g *Graph) commitOrder(ctx context.Context, edits []NodeEdit) ([]int, error
 			if e.Pre == nil {
 				continue
 			}
-			out, err := tx.OutLinks(ctx, *e.Pre)
+			out, err := heldOutLinks(ctx, tx, *e.Pre)
 			if err != nil {
 				return err
 			}

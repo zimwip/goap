@@ -291,12 +291,14 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 	}
 	switch e.Op {
 	case ImpactUpdated, ImpactTransitioned:
-		n := d.Clone()
+		// copy on write: the draft folded is never changed, what the patch does not touch is shared with it
+		n := *d
 		if a := e.Author(); a != "" {
 			n.Editor = a
 		}
 		p := patchOf(e.Patch)
 		if len(p.Props) > 0 || len(p.Unset) > 0 {
+			n.Properties = cloneProps(n.Properties)
 			if n.Properties == nil {
 				n.Properties = map[string]any{}
 			}
@@ -314,21 +316,25 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 		if p.Deleted != nil {
 			n.Deleted = *p.Deleted
 		}
-		for _, a := range linksOf(p.AddLink, p.AddLinks) {
+		adds, updates, removes := linksOf(p.AddLink, p.AddLinks), linksOf(p.UpdateLink, p.UpdateLinks), linksOf(p.RemoveLink, p.RemoveLinks)
+		if len(adds)+len(updates)+len(removes) > 0 {
+			n.Links = slices.Clone(n.Links) // the links' properties are replaced, never changed in place
+		}
+		for _, a := range adds {
 			l := DraftLink{ID: a.ID, Type: a.Type, To: NodeRef{ID: a.ToID, Version: a.ToVersion}, Properties: a.Props}
 			if a.ToID == "" && a.Target != "" {
 				l.Target, _ = lnk.Parse(a.Target)
 			}
 			n.Links = append(n.Links, l)
 		}
-		for _, u := range linksOf(p.UpdateLink, p.UpdateLinks) {
+		for _, u := range updates {
 			for i := range n.Links {
 				if n.Links[i].ID == u.ID {
 					n.Links[i].Properties = u.Props
 				}
 			}
 		}
-		for _, r := range linksOf(p.RemoveLink, p.RemoveLinks) {
+		for _, r := range removes {
 			n.Links = slices.DeleteFunc(n.Links, func(l DraftLink) bool { return l.ID == r.ID })
 		}
 		return &n

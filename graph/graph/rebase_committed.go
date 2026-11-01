@@ -764,7 +764,7 @@ func effectOver(ctx context.Context, tx Tx, pre *domain.NodeRef, post domain.Nod
 	if err != nil {
 		return domain.ImpactEffect{}, err
 	}
-	links, err := tx.OutLinks(ctx, post)
+	links, err := heldOutLinks(ctx, tx, post)
 	if err != nil {
 		return domain.ImpactEffect{}, err
 	}
@@ -775,7 +775,7 @@ func effectOver(ctx context.Context, tx Tx, pre *domain.NodeRef, post domain.Nod
 	if err != nil {
 		return domain.ImpactEffect{}, err
 	}
-	preLinks, err := tx.OutLinks(ctx, *pre)
+	preLinks, err := heldOutLinks(ctx, tx, *pre)
 	if err != nil {
 		return domain.ImpactEffect{}, err
 	}

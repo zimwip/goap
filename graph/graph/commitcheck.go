@@ -143,7 +143,7 @@ func (g *Graph) commitBlackboard(ctx context.Context, tx Tx, c domain.Change, wh
 		}
 	}
 	if !whole {
-		if err := prefetchVersions(ctx, tx, refs); err != nil {
+		if err := prefetchVersionNodes(ctx, tx, refs); err != nil { // the nodes only: no link is read
 			return bb, nil, err
 		}
 	} else if err := r.prefetch(ctx, tx, refs); err != nil {

@@ -420,7 +420,7 @@ func (g *Graph) writeRevert(ctx context.Context, tx Tx, branch string, change do
 			return domain.Node{}, err
 		}
 		n.Properties, n.State, n.Responsible, n.Origins = cloneMap(src.Properties), src.State, src.Responsible, slices.Clone(src.Origins)
-		if links, err = tx.OutLinks(ctx, src.Ref()); err != nil {
+		if links, err = heldOutLinks(ctx, tx, src.Ref()); err != nil {
 			return domain.Node{}, err
 		}
 		like = []domain.NodeRef{src.Ref(), latest.Ref()} // the set of the fork's version, shared as is (ADR 0141)
