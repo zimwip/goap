@@ -63,6 +63,9 @@ func CopyDraft(e ImpactEvent, base Node, links []Link) Draft {
 // Hydrated reports whether the draft of a BaseCopy event has been rebuilt from its version (ImpactEventOf leaves only
 // its base).
 func (e ImpactEvent) Hydrated() bool {
+	if e.Op == ImpactCommitted {
+		return e.Committed != nil && e.Committed.Version > 0 && e.Impact != ""
+	}
 	return e.FromBase == nil || (e.Draft != nil && e.Draft.Key != "")
 }
 
@@ -205,12 +208,16 @@ func SameEntry(a, b ImpactEvent) bool {
 func PartID(entry string, n int) string { return entry + "#" + strconv.Itoa(n) }
 
 // ImpactBatchEntry is the log entry carrying several events (SameEntry, in their order) under the id given; its time is
-// the first event's. ImpactEventsOf reads them back, with the ids PartID gives.
+// the first event's. ImpactEventsOf reads them back, with the ids PartID gives. A part holding its impact only is
+// written as the impact's id (the verdicts of one review); the events of a commit are one commit (CommitEntry).
 func ImpactBatchEntry(id string, events []ImpactEvent) (LogEntry, error) {
 	if len(events) == 0 {
 		return LogEntry{}, fmt.Errorf("an entry carries at least one event")
 	}
 	first := events[0]
+	if first.Op == ImpactCommitted {
+		return CommitEntry(id, events)
+	}
 	parts := make([]map[string]json.RawMessage, len(events))
 	for i, e := range events {
 		if !SameEntry(first, e) {
@@ -227,7 +234,19 @@ func ImpactBatchEntry(id string, events []ImpactEvent) (LogEntry, error) {
 		parts[i]["impactId"] = impact
 	}
 	top := hoist(parts)
-	raw, err := json.Marshal(parts)
+	out := make([]json.RawMessage, len(parts))
+	for i, p := range parts {
+		if impact, ok := p["impactId"]; ok && len(p) == 1 {
+			out[i] = impact // nothing but its impact: the id
+			continue
+		}
+		raw, err := json.Marshal(p)
+		if err != nil {
+			return LogEntry{}, err
+		}
+		out[i] = raw
+	}
+	raw, err := json.Marshal(out)
 	if err != nil {
 		return LogEntry{}, err
 	}
@@ -310,8 +329,12 @@ func unhoist(top, part map[string]json.RawMessage) error {
 	return nil
 }
 
-// ImpactEventsOf is the impact events of a log entry: the one it records, or the ones it carries (ImpactBatchEntry).
+// ImpactEventsOf is the impact events of a log entry: the one it records, or the ones it carries (ImpactBatchEntry),
+// one per node of a commit (CommitEntry).
 func ImpactEventsOf(l LogEntry) ([]ImpactEvent, error) {
+	if l.Type == LogImpact+"."+string(ImpactCommitted) && bytes.Contains(l.Payload, []byte(`"`+nodesKey+`"`)) {
+		return commitEvents(l)
+	}
 	if !bytes.Contains(l.Payload, []byte(`"`+batchKey+`"`)) {
 		e, err := ImpactEventOf(l)
 		if err != nil {
@@ -332,12 +355,18 @@ func ImpactEventsOf(l LogEntry) ([]ImpactEvent, error) {
 		return []ImpactEvent{e}, nil
 	}
 	delete(top, batchKey)
-	var parts []map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &parts); err != nil {
+	var raws []json.RawMessage
+	if err := json.Unmarshal(raw, &raws); err != nil {
 		return nil, err
 	}
-	out := make([]ImpactEvent, len(parts))
-	for i, p := range parts {
+	out := make([]ImpactEvent, len(raws))
+	for i, r := range raws {
+		var p map[string]json.RawMessage
+		if len(r) > 0 && r[0] == '"' {
+			p = map[string]json.RawMessage{"impactId": r} // a part holding its impact only
+		} else if err := json.Unmarshal(r, &p); err != nil {
+			return nil, err
+		}
 		if err := unhoist(top, p); err != nil {
 			return nil, err
 		}
@@ -414,4 +443,132 @@ func ImpactEventOf(l LogEntry) (ImpactEvent, error) {
 		}
 	}
 	return e, nil
+}
+
+// A commit is one event of the log (ADR 0144 addendum): {"op": "committed", "commit", "branch", "nodes": [...]}, the
+// nodes it commits, in order, valid for all of them at once. A node whose version is the change's own for its impact
+// (ImpactEvent.Recorded) is its id, or {"id", "effect"}: node_version names the change, the impact and the entry, so
+// the graph reads them back (Graph hydrates the entry: CommitNodes, WithCommitNodes); another node names its impact
+// and its version too.
+const nodesKey = "nodes"
+
+// CommittedNode is a node a commit names: its version and impact, its effect (ImpactEvent.Effect). Version 0 and no
+// impact: left to the version store.
+type CommittedNode struct {
+	ID      NodeID         `json:"id"`
+	Impact  ChangeImpactID `json:"impactId,omitempty"`
+	Version Version        `json:"version,omitempty"`
+	Effect  *ImpactEffect  `json:"effect,omitempty"`
+}
+
+// Hydrated reports a node whose version and impact the entry names.
+func (n CommittedNode) Hydrated() bool { return n.Version > 0 && n.Impact != "" }
+
+// MarshalJSON writes a node naming nothing but itself as its id.
+func (n CommittedNode) MarshalJSON() ([]byte, error) {
+	if n.Impact == "" && n.Version == 0 && n.Effect == nil {
+		return json.Marshal(string(n.ID))
+	}
+	type plain CommittedNode
+	return json.Marshal(plain(n))
+}
+
+// UnmarshalJSON reads a node written as its id or whole.
+func (n *CommittedNode) UnmarshalJSON(raw []byte) error {
+	if len(raw) > 0 && raw[0] == '"' {
+		*n = CommittedNode{}
+		return json.Unmarshal(raw, &n.ID)
+	}
+	type plain CommittedNode
+	var p plain
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return err
+	}
+	*n = CommittedNode(p)
+	return nil
+}
+
+// commitPayload is the payload of a commit.
+type commitPayload struct {
+	Op     ImpactOp        `json:"op"`
+	Commit CommitID        `json:"commit,omitempty"`
+	Branch string          `json:"branch,omitempty"`
+	Nodes  []CommittedNode `json:"nodes"`
+}
+
+// CommitEntry is the log entry of a commit: the committed events of one commit (SameEntry, one commit and branch), in
+// their order, under the id given.
+func CommitEntry(id string, events []ImpactEvent) (LogEntry, error) {
+	if len(events) == 0 {
+		return LogEntry{}, fmt.Errorf("a commit names at least one node")
+	}
+	first := events[0]
+	p := commitPayload{Op: ImpactCommitted, Commit: first.Commit, Branch: first.Branch, Nodes: make([]CommittedNode, len(events))}
+	for i, e := range events {
+		if !SameEntry(first, e) || e.Op != ImpactCommitted || e.Commit != first.Commit || e.Branch != first.Branch || e.Committed == nil {
+			return LogEntry{}, fmt.Errorf("event %d (%s of %s) is not of the commit %s on %s", i, e.Op, e.Impact, first.Commit, first.Branch)
+		}
+		n := CommittedNode{ID: e.Committed.ID, Effect: e.Effect}
+		if !e.Recorded {
+			n.Impact, n.Version = e.Impact, e.Committed.Version
+		}
+		p.Nodes[i] = n
+	}
+	raw, err := json.Marshal(p)
+	l := LogEntry{ID: id, Change: first.Change, Type: LogImpact + "." + string(ImpactCommitted), Flow: first.Flow, Execution: first.Execution,
+		By: first.By, At: first.At, Causation: first.Causation, Payload: raw}
+	if len(events) == 1 {
+		l.Subject, l.Node = string(first.Impact), first.Committed.ID
+	}
+	return l, err
+}
+
+// CommitNodes is the nodes a commit entry names (ok false: the entry is no commit, or one written before commits were
+// one event).
+func CommitNodes(l LogEntry) ([]CommittedNode, bool, error) {
+	if l.Type != LogImpact+"."+string(ImpactCommitted) || !bytes.Contains(l.Payload, []byte(`"`+nodesKey+`"`)) {
+		return nil, false, nil
+	}
+	var p commitPayload
+	if err := json.Unmarshal(l.Payload, &p); err != nil {
+		return nil, false, err
+	}
+	return p.Nodes, true, nil
+}
+
+// WithCommitNodes is the commit entry naming the nodes given in place of its own (the graph hydrating it).
+func WithCommitNodes(l LogEntry, nodes []CommittedNode) (LogEntry, error) {
+	var p commitPayload
+	if err := json.Unmarshal(l.Payload, &p); err != nil {
+		return l, err
+	}
+	p.Nodes = nodes
+	raw, err := json.Marshal(p)
+	l.Payload = raw
+	return l, err
+}
+
+// commitEvents reads a commit back as one committed event per node, with the ids PartID gives (the entry's own when it
+// names one node). A node left to the version store has version 0 and, unless the entry is its own, no impact
+// (Hydrated false).
+func commitEvents(l LogEntry) ([]ImpactEvent, error) {
+	var p commitPayload
+	if err := json.Unmarshal(l.Payload, &p); err != nil {
+		return nil, err
+	}
+	out := make([]ImpactEvent, len(p.Nodes))
+	for i, n := range p.Nodes {
+		id := PartID(l.ID, i)
+		if len(p.Nodes) == 1 {
+			id = l.ID
+		}
+		impact := n.Impact
+		if impact == "" && len(p.Nodes) == 1 {
+			impact = ChangeImpactID(l.Subject)
+		}
+		ref := NodeRef{ID: n.ID, Version: n.Version}
+		out[i] = ImpactEvent{ID: id, Change: l.Change, Seq: int(l.Seq), Impact: impact, Op: ImpactCommitted, Flow: l.Flow, Execution: l.Execution,
+			By: l.By, At: l.At, Causation: l.Causation, Committed: &ref, Effect: n.Effect, Commit: p.Commit, Branch: p.Branch, Recorded: !n.Hydrated()}
+	}
+	return out, nil
 }

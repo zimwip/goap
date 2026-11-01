@@ -454,6 +454,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	})
 	checkSQL(t, "pg change nodes", pg, pg.sqlChangeNodes(), `SELECT DISTINCT node_id::text FROM node_version WHERE change_id = $1`)
 	checkSQL(t, "sqlite change nodes", lite, lite.sqlChangeNodes(), `SELECT DISTINCT node_id FROM node_version WHERE change_id = ?`)
+	checkSQL(t, "pg change version records", pg, pg.sqlChangeVersionRecords(), `SELECT node_id::text, version, coalesce(change_impact::text, ''), log_seq FROM node_version WHERE change_id = $1 AND log_seq IS NOT NULL AND log_seq > 0 AND log_seq <= $2 ORDER BY log_seq, node_id`)
+	checkSQL(t, "sqlite change version records", lite, lite.sqlChangeVersionRecords(), `SELECT node_id, version, coalesce(change_impact, ''), log_seq FROM node_version WHERE change_id = ? AND log_seq IS NOT NULL AND log_seq > 0 AND log_seq <= ? ORDER BY log_seq, node_id`)
 	checkList("pg DeleteChange rows", pg, pg.deleteChangeRows(), []string{
 		`DELETE FROM tag WHERE (node_id, version) IN (SELECT node_id, version FROM node_version WHERE change_id = $1)`,
 		`DELETE FROM link WHERE change_id = $1`,

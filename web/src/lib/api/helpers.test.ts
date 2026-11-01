@@ -113,6 +113,54 @@ describe("decodeImpactEvents", () => {
       ["e1#1", "i2", "bob", "accepted", "REV-1", "ok 2"],
     ]);
   });
+  it("reads a commit as one committed event per node it names", () => {
+    const events = decodeImpactEvents<{
+      id: string;
+      impactId?: string;
+      op: string;
+      committed: { id: string; version?: number };
+      effect?: { kind: string };
+      commit: string;
+      branch: string;
+    }>({
+      id: "e3",
+      type: "impact.committed",
+      by: "bob",
+      payload: JSON.stringify({
+        op: "committed",
+        commit: "C1",
+        branch: "main",
+        nodes: [
+          {
+            id: "n1",
+            impactId: "i1",
+            version: 3,
+            effect: { kind: "modified" },
+          },
+          { id: "n2", impactId: "i2", version: 1 },
+        ],
+      }),
+    });
+    expect(events).toMatchObject([
+      {
+        id: "e3#0",
+        impactId: "i1",
+        op: "committed",
+        committed: { id: "n1", version: 3 },
+        effect: { kind: "modified" },
+        commit: "C1",
+        branch: "main",
+      },
+      {
+        id: "e3#1",
+        impactId: "i2",
+        op: "committed",
+        committed: { id: "n2", version: 1 },
+        commit: "C1",
+        branch: "main",
+      },
+    ]);
+  });
   it("reads an entry of one event as before", () => {
     expect(
       decodeImpactEvents<{ impactId: string; op: string }>({

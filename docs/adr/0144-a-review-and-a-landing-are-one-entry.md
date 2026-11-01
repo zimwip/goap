@@ -63,3 +63,23 @@ most of the garbage the service collected.
 - A verdict no longer re-reads the facts of its change.
 - The database starts from zero: no entry is migrated. A reader of the log written by another tool must read the
   `impacts` parts.
+
+## Addendum: a commit is one event naming its nodes
+
+A commit holds for all its nodes at once: it is one event, not one event per impact. A `impact.committed` entry is
+`{"op": "committed", "commit", "branch", "nodes": [...]}`, the nodes it commits in order (`domain.CommitEntry`). A node
+whose version is the change's own for its impact (`ImpactEvent.Recorded`, set by the writer: the version names the
+change, the impact and an entry of its log, the last it wrote of the node by the commit) is its id, with its effect when
+it has one; the graph reads the version and the impact back from the version store (`hydrateCommits`,
+`Tx.ChangeVersionRecords`: one statement per change read), and serves a commit so (`ChangeLog`, the PROV-O export, the
+web's `decodeImpactEvents`). This holds for the commit of a change on its own branch, its revert versions and its
+integration into the branch it forked from (which names the versions the commit wrote). A node whose version another
+change wrote (a sub-change's work recorded in its parent, a merge version) names its impact and version. The folds still
+apply a commit to each impact it names (`domain.ImpactEventsOf` reads it as one committed event per node).
+
+The rule is one call on a change, one event; several only by exception. A verdict is the acceptance or the rejection of
+one impact, made by the person at its own time: the verdicts of a review submitted together are an entry each (the
+review batch stages them, `impactStage.separate`, and logs them one by one), every one naming the submitted record
+(`fact.review`, the one validation) as its cause; this supersedes §2's single `impact.reviewed` entry. The merges of the
+graph (`graph.merge`: a three-way merge, a sub-change recorded in its parent) keep their verdicts in one entry, one
+operation of the graph. A part of an entry holding nothing but its impact is written as the impact's id.

@@ -79,19 +79,55 @@ function unhoist(
  * `<entry>#<n>`. Another entry is decoded as one value (decodeLogEntry). */
 export function decodeImpactEvents<T>(l: LogEntry): T[] {
   const payload = JSON.parse(l.payload ?? "{}");
+  if (l.type === "impact.committed" && Array.isArray(payload.nodes))
+    return commitEvents<T>(l, payload);
   if (!l.type?.startsWith("impact.") || !Array.isArray(payload.impacts))
     return [decodeLogEntry<T>(l)];
   const { impacts, ...top } = payload as {
-    impacts: Record<string, unknown>[];
+    impacts: (Record<string, unknown> | string)[];
   } & Record<string, unknown>;
   return impacts.map((p, n) => {
-    const part = unhoist(top, p);
+    // a part holding its impact only is the impact's id (the verdicts of one review)
+    const part = unhoist(top, typeof p === "string" ? { impactId: p } : p);
     return decodeLogEntry<T>({
       ...l,
       id: `${l.id}#${n}`,
       subject: l.subject || (part.impactId as string | undefined),
       payload: JSON.stringify(part),
     });
+  });
+}
+
+/** A commit is one event naming its nodes (ADR 0144 addendum: `{"op": "committed", "commit", "branch", "nodes"}`, the
+ * graph serving each node with its impact and version): read as one committed event per node, as the other impact
+ * events of an entry. */
+function commitEvents<T>(
+  l: LogEntry,
+  payload: { commit?: string; branch?: string; nodes: unknown[] },
+): T[] {
+  const many = payload.nodes.length > 1;
+  return payload.nodes.map((raw, n) => {
+    const node = (typeof raw === "string" ? { id: raw } : raw) as {
+      id?: string;
+      impactId?: string;
+      version?: number;
+      effect?: unknown;
+    };
+    return {
+      id: many ? `${l.id}#${n}` : l.id,
+      changeId: l.changeId,
+      seq: l.seq,
+      impactId: node.impactId || (many ? undefined : l.subject || undefined),
+      op: "committed",
+      flow: l.flow,
+      execution: l.execution,
+      by: l.by,
+      at: l.at,
+      committed: { id: node.id, version: node.version },
+      ...(node.effect ? { effect: node.effect } : {}),
+      ...(payload.commit ? { commit: payload.commit } : {}),
+      ...(payload.branch ? { branch: payload.branch } : {}),
+    } as T;
   });
 }
 

@@ -27,6 +27,15 @@ type Repo interface {
 }
 
 // Tx gives access to storage primitives inside a transaction.
+// VersionRecord is what a version says of the change that wrote it: its node and number, its impact and the entry of
+// the change's log that committed it.
+type VersionRecord struct {
+	Node    domain.NodeID
+	Version domain.Version
+	Impact  domain.ChangeImpactID
+	LogSeq  int64
+}
+
 type Tx interface {
 	// Node returns an exact node version, or the latest one on main when ref.Version is 0.
 	Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error)
@@ -193,6 +202,9 @@ type Tx interface {
 	// ChangeNodeIDs lists the nodes a change wrote versions of. What made each version (its change impact, the review
 	// that let it commit) is the view of the change, read by the impact the version names (ADR 0174 addendum).
 	ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error)
+	// ChangeVersionRecords lists the versions a change wrote that name an entry of its log at or before upTo, by that
+	// position: what a commit entry naming its nodes only is read back from (ADR 0144 addendum).
+	ChangeVersionRecords(ctx context.Context, change domain.ChangeID, upTo int64) ([]VersionRecord, error)
 	// NodeChangePage lists the last limit changes whose log names a node in an impact entry whose cursor is below before
 	// (0: any), newest first; the cursor of a change is the position of its first such entry (ADR 0140: a page of a
 	// history, whatever its length; ADR 0174: committed or not, read from the log).

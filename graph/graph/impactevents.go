@@ -111,7 +111,7 @@ func (g *Graph) stage(ctx context.Context, tx Tx, s *impactStage, e domain.Impac
 	if s.entry == "" {
 		s.change, s.entry = e.Change, g.newID()
 	}
-	if len(s.events) > 0 {
+	if len(s.events) > 0 && !s.separate {
 		if !domain.SameEntry(s.events[0], e) {
 			return fmt.Errorf("change %s: event %s of %s is not staged with %s of %s", e.Change, e.Op, e.Impact, s.events[0].Op, s.events[0].Impact)
 		}

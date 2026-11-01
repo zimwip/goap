@@ -400,7 +400,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 			continue // left as is on the target: nothing of this change committed
 		}
 		ref := head.Ref()
-		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
+		committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent), Recorded: recorded(head, c.ID, cn.ID)})
 	}
 	if seq == 0 {
 		// one entry for the commit (ADR 0144)
@@ -420,7 +420,7 @@ func (g *Graph) commit(ctx context.Context, tx Tx, c domain.Change, own domain.B
 		}
 		if n.Reason == domain.ReasonRevert && n.ChangeID == c.ID {
 			ref := n.Ref()
-			committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent)})
+			committed = append(committed, domain.ImpactEvent{Change: c.ID, Impact: n.ChangeImpact, Op: domain.ImpactCommitted, Committed: &ref, Commit: result, Branch: domain.BranchOf(own.Parent), Recorded: recorded(n, c.ID, n.ChangeImpact)})
 		}
 	}
 	return g.emitAt(ctx, tx, seq, committed...)
@@ -451,4 +451,12 @@ func targetNodes(ctx context.Context, tx Tx, c domain.Change, own domain.Branch,
 		byID[n.ID] = n
 	}
 	return byID, nil
+}
+
+// recorded reports whether a committed event names a version its change wrote for the impact, naming an entry of its
+// log: the commit names the node only, the version and the impact are read back from it (domain.ImpactEvent.Recorded).
+// The version must be the last the change wrote of the node by the commit (the one a commit writes, or the change's
+// last commit integrated).
+func recorded(n domain.Node, c domain.ChangeID, impact domain.ChangeImpactID) bool {
+	return n.ChangeID == c && n.ChangeImpact == impact && n.LogSeq > 0
 }

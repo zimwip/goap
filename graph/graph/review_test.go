@@ -95,11 +95,16 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	if rs := review.Reviews(ch.Items); len(rs) != 1 || rs[0].Status != review.Submitted {
 		t.Fatalf("item: %+v", rs)
 	}
-	// the record of the review comes first, and is the cause of the one entry carrying every verdict it decides (ADR 0105,
-	// 0144)
+	// the record of the review comes first, and is the cause of the entry of each verdict it decides (ADR 0105, 0144
+	// addendum: an acceptance is of one impact)
 	causes := causesOf(t, g, c.ID)
-	if len(causes) != 1 || causes[0].cause.ID != string(rs0(t, g, c.ID, "REV-1")) || causes[0].cause.Seq >= causes[0].seq {
+	if len(causes) != 2 {
 		t.Fatalf("causation: %+v", causes)
+	}
+	for _, cause := range causes {
+		if cause.cause.ID != string(rs0(t, g, c.ID, "REV-1")) || cause.cause.Seq >= cause.seq {
+			t.Fatalf("causation: %+v", causes)
+		}
 	}
 	// a verdict on its own is a review of one entry, submitted at once
 	if _, err := g.accept(ctx, c.ID, imps[2].ID, "carol", "ok"); err != nil {
@@ -111,7 +116,7 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	if !ok || lone.Status != review.Submitted || lone.By != "carol" || len(lone.Entries) != 1 || lone.Entries[0] != (review.Entry{Impact: string(imps[2].ID), Comment: "ok", Outcome: review.Accept}) {
 		t.Fatalf("a lone verdict is a submitted review of one entry: %+v (%v)", lone, ok)
 	}
-	if causes := causesOf(t, g, c.ID); len(causes) != 2 || causes[1].cause.ID != string(lone.Item) {
+	if causes := causesOf(t, g, c.ID); len(causes) != 3 || causes[2].cause.ID != string(lone.Item) {
 		t.Fatalf("the lone verdict is caused by its review: %+v", causes)
 	}
 }
