@@ -367,6 +367,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg OpenChangeIDs", pg, pg.sqlOpenChangeIDs(), nil, `SELECT id::text FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at`, nil)
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 
+	q, a = pg.sqlOpenChangesOn("n1")
+	check("pg OpenChangesOn", pg, q, a, `SELECT c.id::text, coalesce((SELECT max(l.seq) FROM change_log l WHERE l.change_id = c.id), 0) FROM change c WHERE c.status NOT IN ('applied', 'abandoned') AND c.namespace = coalesce((SELECT n.namespace FROM node n WHERE n.id = $1), c.namespace) ORDER BY c.created_at`, []any{"n1"})
+	q, a = lite.sqlOpenChangesOn("n1")
+	check("sqlite OpenChangesOn", lite, q, a, `SELECT c.id, coalesce((SELECT max(l.seq) FROM change_log l WHERE l.change_id = c.id), 0) FROM change c WHERE c.status NOT IN ('applied', 'abandoned') AND c.namespace = coalesce((SELECT n.namespace FROM node n WHERE n.id = ?), c.namespace) ORDER BY c.created_at, rowid`, []any{"n1"})
+
 	// Change impacts (ADR 0174)
 	q, a = pg.sqlNodeChangePage("n1", 0, 3)
 	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(log_seq) FROM node_version WHERE node_id = $1 AND log_seq > 0 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})

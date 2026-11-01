@@ -809,6 +809,14 @@ func (d dialect) sqlOpenChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE status NOT IN ('applied', 'abandoned')` + d.orderBy("created_at", "")
 }
 
+// sqlOpenChangesOn reads the open changes of the namespace of a node (all when the node has no row), oldest first, each
+// with the last position of its log (index change_log_change): what NodeChanges looks at in their views.
+func (d dialect) sqlOpenChangesOn(node domain.NodeID) (string, []any) {
+	return `SELECT ` + d.id("c.id") + `, coalesce((SELECT max(l.seq) FROM change_log l WHERE l.change_id = c.id), 0) FROM change c` +
+		` WHERE c.status NOT IN ('applied', 'abandoned') AND c.namespace = coalesce((SELECT n.namespace FROM node n WHERE n.id = ` + d.ph(1) + `), c.namespace)` +
+		d.orderBy("c.created_at", ""), []any{string(node)}
+}
+
 // sqlNodeChangePage reads the last limit changes that wrote versions of a node, each with the position of the first
 // entry of its log committing one, whose position is below before (0: any), newest first: from the versions of the node
 // (index node_version_pkey; ADR 0180: an impact names its node, a version its change and the entry committing it).

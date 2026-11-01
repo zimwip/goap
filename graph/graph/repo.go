@@ -199,6 +199,9 @@ type Tx interface {
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
+	// OpenChangesOn lists the open changes that may act on a node, oldest first: those of its namespace (all of them
+	// when the graph holds no version of it), each with the last position of its log (Seq; 0: none).
+	OpenChangesOn(ctx context.Context, node domain.NodeID) ([]NodeChange, error)
 	// ChangeNodeIDs lists the nodes a change wrote versions of. What made each version (its change impact, the review
 	// that let it commit) is the view of the change, read by the impact the version names (ADR 0174 addendum).
 	ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error)

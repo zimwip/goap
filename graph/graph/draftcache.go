@@ -557,6 +557,12 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 
 // foldDrafts folds the impact log of a change up to its last event as the transaction sees it.
 func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*draftState, error) {
+	return g.foldDraftsKeep(ctx, tx, id, true)
+}
+
+// foldDraftsKeep is foldDrafts; keep false leaves a view the cache does not hold out of it: a read looking at many
+// changes once (NodeChanges) must not evict the views their writers work on.
+func (g *Graph) foldDraftsKeep(ctx context.Context, tx Tx, id domain.ChangeID, keep bool) (*draftState, error) {
 	if st := currentDrafts(tx, id); st != nil {
 		return st, nil // nothing can follow it: no need to ask the log
 	}
@@ -605,8 +611,8 @@ func (g *Graph) foldDrafts(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	readLog(tx, next)
 	if wroteLog(tx, id) {
 		keepDrafts(tx, next)
-	} else {
-		g.draftStates.put(next)
+	} else if keep || st.seq > 0 {
+		g.draftStates.put(next) // a view the cache held (or one the transaction folded) moves on
 	}
 	return next, nil
 }

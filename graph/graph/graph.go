@@ -1063,15 +1063,22 @@ func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID
 func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID, before int64, limit int) (out []domain.Change, next int64, err error) {
 	limit = pageLimit(limit)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		open, err := tx.OpenChangeIDs(ctx)
+		// the open changes of the node's namespace, each with the top of its log: a view kept up to it is read as is,
+		// only the others ask their log for what follows
+		tops, err := tx.OpenChangesOn(ctx, node)
 		if err != nil {
 			return err
 		}
+		open := make([]domain.ChangeID, len(tops))
 		cursor := map[domain.ChangeID]int64{}
-		for _, id := range open {
-			st, err := g.foldDrafts(ctx, tx, id)
-			if err != nil {
-				return err
+		for i, oc := range tops {
+			id := oc.Change
+			open[i] = id
+			st := g.draftStates.get(id)
+			if st == nil || (st.seq < oc.Seq && st.top.Load() <= oc.Seq) {
+				if st, err = g.foldDraftsKeep(ctx, tx, id, false); err != nil {
+					return err
+				}
 			}
 			if seq, ok := st.firstOn(node); ok && (before == 0 || seq < before) {
 				cursor[id] = seq
