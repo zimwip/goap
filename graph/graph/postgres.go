@@ -1582,6 +1582,20 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
+// OpenChangesOn implements Tx.
+func (t *pgTx) OpenChangesOn(ctx context.Context, node domain.NodeID) ([]NodeChange, error) {
+	q, args := dialectPG.sqlOpenChangesOn(node)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "open changes")
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (NodeChange, error) {
+		var c NodeChange
+		err := r.Scan(&c.Change, &c.Seq)
+		return c, err
+	})
+}
+
 // ChangeNodeIDs implements Tx.
 func (t *pgTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
 	rows, err := t.tx.Query(ctx, dialectPG.sqlChangeNodes(), string(change))

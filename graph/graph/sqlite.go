@@ -961,6 +961,25 @@ func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 	return out, rows.Err()
 }
 
+// OpenChangesOn implements Tx.
+func (t *sqliteTx) OpenChangesOn(ctx context.Context, node domain.NodeID) ([]NodeChange, error) {
+	q, args := dialectSQLite.sqlOpenChangesOn(node)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NodeChange
+	for rows.Next() {
+		var c NodeChange
+		if err := rows.Scan(&c.Change, &c.Seq); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // ChangeNodeIDs implements Tx.
 func (t *sqliteTx) ChangeNodeIDs(ctx context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
 	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlChangeNodes(), string(change))

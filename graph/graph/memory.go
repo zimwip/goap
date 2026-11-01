@@ -890,6 +890,27 @@ func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	return out, nil
 }
 
+// OpenChangesOn implements Tx.
+func (t *memTx) OpenChangesOn(ctx context.Context, node domain.NodeID) ([]NodeChange, error) {
+	ids, _ := t.OpenChangeIDs(ctx)
+	ns, known := "", false
+	if vs := t.st.versions[node]; len(vs) > 0 {
+		ns, known = domain.NamespaceOf(vs[0].Namespace), true
+	}
+	top := map[domain.ChangeID]int64{}
+	for _, e := range t.st.log {
+		top[e.Change] = max(top[e.Change], e.Seq)
+	}
+	var out []NodeChange
+	for _, id := range ids {
+		if known && domain.NamespaceOf(t.st.changes[id].Namespace) != ns {
+			continue
+		}
+		out = append(out, NodeChange{Change: id, Seq: top[id]})
+	}
+	return out, nil
+}
+
 // ChangeNodeIDs implements Tx.
 func (t *memTx) ChangeNodeIDs(_ context.Context, change domain.ChangeID) ([]domain.NodeID, error) {
 	var out []domain.NodeID
