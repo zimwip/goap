@@ -234,6 +234,7 @@ function PerfRun { $a = PerfArgs; $h = PerfHold; Run docker @Perf run --rm bench
 # captures of the performance stack's Prometheus (perf-capture), replayed by perf-analysis
 $PerfCaptures = '.goap/perf/captures'
 $PerfAnalysis = @('compose', '-f', 'deploy/compose/perf-analysis.yml')
+function PerfDump { Run go run ./platform/cmd/goap-perfdump -args "$((PerfArgs) -join ' ')" }
 function PerfCapture {
     $name = if ($env:PERF_CAPTURE) { $env:PERF_CAPTURE } else { Get-Date -Format 'yyyyMMdd-HHmmss' }
     $dir = Join-Path $PerfCaptures $name
@@ -322,6 +323,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   perf-up | perf-run | perf-down | perf-reset
                     start the performance stack ($env:PERF_CONTAINERS: cadvisor, podman or none), one more run of
                     goap-bench, stop it (keeping its data), drop its data
+  perf-dump         text summary of the last run of the performance stack, by volume written, with the date and
+                    the commit: printed and kept in .goap\perf\dumps ($env:PERF_ARGS in its header)
   perf-capture      save what the performance stack's Prometheus holds in .goap\perf\captures\<$env:PERF_CAPTURE>
   perf-analysis | perf-analysis-down
                     replay a capture ($env:PERF_CAPTURE, default the latest) in a Grafana of its own,
@@ -368,6 +371,7 @@ switch ($Target) {
     'perf-images'      { PerfImages }
     'perf-down'        { PerfDown }
     'perf-reset'       { PerfReset }
+    'perf-dump'        { PerfDump }
     'perf-capture'     { PerfCapture }
     'perf-analysis'    { PerfAnalysis }
     'perf-analysis-down' { PerfAnalysisDown }

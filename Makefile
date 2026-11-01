@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: perf perf-images perf-up perf-run perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test web-e2e web-e2e-browser web-e2e-run test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-images perf-up perf-run perf-dump perf-capture perf-analysis perf-analysis-down perf-down perf-reset help all build test test-wasm tidy web-test web-e2e web-e2e-browser web-e2e-run test-pg lint eval generate cypher tools up urls down reset logs dev dev-backend dev-web dev-reset local local-build local-test local-bench local-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -168,6 +168,9 @@ perf-up: perf-images ## start the performance stack (builds its image): graph, P
 
 perf-run: ## one more run of goap-bench against the performance stack (PERF_ARGS, e.g. PERF_ARGS="-versions 1000000 -workers 8"); it holds once done until interrupted, or for PERF_AUTOSTOP (e.g. 30m; 0: exits with the run)
 	$(PERF) run --rm bench $(PERF_HOLD) $(PERF_ARGS)
+
+perf-dump: ## text summary of the last run of the performance stack (its Prometheus), by volume written, with the date and the commit: printed and kept in .goap/perf/dumps (PERF_ARGS written in its header)
+	go run ./platform/cmd/goap-perfdump -args "$(PERF_ARGS)"
 
 perf-capture: ## save what the performance stack's Prometheus holds in .goap/perf/captures/<PERF_CAPTURE, default the time>, for make perf-analysis
 	@set -e; name="$${PERF_CAPTURE:-$$(date +%Y%m%d-%H%M%S)}"; dir="$(PERF_CAPTURES)/$$name"; \
